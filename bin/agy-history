@@ -259,46 +259,44 @@ def prompt_on_exit():
     if latest.get("msg_count", 0) == 0:
         return
         
-    current_name = latest.get("custom_name", "")
-    current_cat = latest.get("category", "")
+    current_name = latest.get("custom_name", "").strip()
+    current_cat = latest.get("category", "").strip()
     
-    name_display = current_name if current_name else "(chưa đặt)"
-    cat_display = f"[{current_cat}]" if current_cat else "(chưa có)"
-    
-    print(f"\n{BLUE}╭─ 📝 {BOLD}Lưu thông tin phiên AGY vừa kết thúc{RESET}{BLUE} ───────────────────────╮{RESET}")
+    # NẾU LÀ PHIÊN CŨ ĐÃ CÓ TÊN HOẶC CATEGORY -> TỰ ĐỘNG DUY TRÌ & LƯU TIẾP, KHÔNG HỎI LẠI
+    if current_name or current_cat:
+        update_session_meta(latest["id"], name=current_name if current_name else None, category=current_cat if current_cat else None)
+        info_parts = []
+        if current_name:
+            info_parts.append(f"Tên: '{current_name}'")
+        if current_cat:
+            info_parts.append(f"Category: [{current_cat}]")
+        print(f"\n{GREEN}✓ Đã tự động duy trì & lưu tiếp phiên chat ({', '.join(info_parts)})!{RESET}\n")
+        return
+        
+    # NẾU LÀ PHIÊN MỚI TINH (CHƯA CÓ TÊN & CATEGORY) -> HỎI ĐẶT TÊN ĐỂ LƯU VÀO MỚI
+    print(f"\n{BLUE}╭─ 📝 {BOLD}Lưu thông tin phiên AGY MỚI vừa kết thúc{RESET}{BLUE} ───────────────────╮{RESET}")
     print(f"{BLUE}│{RESET} ID: {CYAN}{latest['id'][:8]}{RESET} │ Nội dung: {DIM}{latest['prompt'][:48]}...{RESET}")
-    print(f"{BLUE}│{RESET} Tên hiện tại: {BOLD}{name_display}{RESET} │ Category: {MAGENTA}{cat_display}{RESET}")
     print(f"{BLUE}╰────────────────────────────────────────────────────────────────────────╯{RESET}")
     
     try:
-        name_hint = f" [Hiện tại: '{current_name}' - Enter để giữ nguyên]" if current_name else " [Enter để bỏ qua]"
-        name_prompt = f"{GREEN}👉 Đặt Tên gợi nhớ{RESET}{name_hint}: "
+        name_prompt = f"{GREEN}👉 Đặt Tên gợi nhớ{RESET} [Enter để bỏ qua]: "
         new_name = input(name_prompt).strip()
         
-        cat_hint = f" [Hiện tại: '{current_cat}' - Enter để giữ nguyên]" if current_cat else " [Enter để bỏ qua]"
-        cat_prompt = f"{YELLOW}👉 Đặt Category{RESET}{cat_hint}: "
+        cat_prompt = f"{YELLOW}👉 Đặt Category{RESET} (VD: study, work, debug...) [Enter để bỏ qua]: "
         new_cat = input(cat_prompt).strip()
         
-        # Nếu nhập mới thì cập nhật, nếu Enter thì giữ nguyên giá trị cũ
         if new_name:
             update_session_meta(latest["id"], name=new_name)
-        elif current_name:
-            update_session_meta(latest["id"], name=current_name)
-            
         if new_cat:
             update_session_meta(latest["id"], category=new_cat)
-        elif current_cat:
-            update_session_meta(latest["id"], category=current_cat)
             
-        if new_name or new_cat or current_name or current_cat:
-            final_name = new_name if new_name else current_name
-            final_cat = new_cat if new_cat else current_cat
+        if new_name or new_cat:
             info_parts = []
-            if final_name:
-                info_parts.append(f"Tên: '{final_name}'")
-            if final_cat:
-                info_parts.append(f"Category: [{final_cat}]")
-            print(f"{GREEN}✓ Đã duy trì & lưu thông tin ({', '.join(info_parts)})!{RESET}\n")
+            if new_name:
+                info_parts.append(f"Tên: '{new_name}'")
+            if new_cat:
+                info_parts.append(f"Category: [{new_cat}]")
+            print(f"{GREEN}✓ Đã lưu thông tin phiên chat mới ({', '.join(info_parts)})!{RESET}\n")
         else:
             print(f"{DIM}• Bỏ qua đặt tên/category cho phiên này.{RESET}\n")
     except (KeyboardInterrupt, EOFError):
