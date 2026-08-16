@@ -1,0 +1,31 @@
+#!/bin/bash
+# Antigravity CLI Wrapper: maps --yolo to --dangerously-skip-permissions and prompts on exit
+
+new_args=()
+for arg in "$@"; do
+    if [ "$arg" = "--yolo" ]; then
+        new_args+=("--dangerously-skip-permissions")
+    else
+        new_args+=("$arg")
+    fi
+done
+
+# Chạy agy-real (không dùng exec để shell bắt được sự kiện thoát)
+if command -v agy-real >/dev/null 2>&1; then
+    agy-real "${new_args[@]}"
+elif [ -x "$HOME/.local/bin/agy-real" ]; then
+    "$HOME/.local/bin/agy-real" "${new_args[@]}"
+else
+    echo "Lỗi: Không tìm thấy binary agy-real!" >&2
+    exit 1
+fi
+exit_code=$?
+
+# Tự động kích hoạt hook hỏi Tên & Category khi phiên kết thúc (kể cả khi bấm Ctrl+C hoặc /exit)
+if command -v agy-history >/dev/null 2>&1; then
+    agy-history --on-exit
+elif [ -x "$HOME/.local/bin/agy-history" ]; then
+    "$HOME/.local/bin/agy-history" --on-exit
+fi
+
+exit $exit_code

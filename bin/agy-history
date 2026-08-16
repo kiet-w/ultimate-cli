@@ -1,0 +1,599 @@
+#!/usr/bin/env python3
+import os
+import sys
+import glob
+import json
+import shutil
+import subprocess
+from datetime import datetime
+
+BRAIN_DIR = os.path.expanduser("~/.gemini/antigravity-cli/brain")
+META_FILE = os.path.expanduser("~/.gemini/antigravity-cli/session_tags.json")
+MAX_LOGS = 15
+
+# ANSI Color codes
+BOLD = "\033[1m"
+DIM = "\033[2m"
+CYAN = "\033[36m"
+GREEN = "\033[32m"
+YELLOW = "\033[33m"
+BLUE = "\033[34m"
+MAGENTA = "\033[35m"
+RED = "\033[31m"
+RESET = "\033[0m"
+
+CATEGORY_COLORS = {
+    "work": BLUE,
+    "study": GREEN,
+    "debug": RED,
+    "project": MAGENTA,
+    "research": CYAN,
+    "chat": YELLOW,
+    "game": MAGENTA,
+    "test": DIM,
+}
+
+def load_global_meta():
+    if os.path.exists(META_FILE):
+        try:
+            with open(META_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            return {}
+    return {}
+
+def save_global_meta(meta):
+    try:
+        with open(META_FILE, "w", encoding="utf-8") as f:
+            json.dump(meta, f, indent=2, ensure_ascii=False)
+    except Exception:
+        pass
+
+def get_session_meta(session_id, global_meta):
+    meta_path = os.path.join(BRAIN_DIR, session_id, "meta.json")
+    if os.path.exists(meta_path):
+        try:
+            with open(meta_path, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return global_meta.get(session_id, {})
+
+def update_session_meta(session_id, category=None, name=None):
+    global_meta = load_global_meta()
+    current = get_session_meta(session_id, global_meta)
+    
+    if category is not None:
+        current["category"] = category.strip()
+    if name is not None:
+        current["name"] = name.strip()
+    current["updated_at"] = datetime.now().isoformat()
+    
+    global_meta[session_id] = current
+    save_global_meta(global_meta)
+    
+    try:
+        meta_path = os.path.join(BRAIN_DIR, session_id, "meta.json")
+        with open(meta_path, "w", encoding="utf-8") as f:
+            json.dump(current, f, indent=2, ensure_ascii=False)
+    except Exception:
+        pass
+
+def delete_session(session_id):
+    session_dir = os.path.join(BRAIN_DIR, session_id)
+    if os.path.exists(session_dir):
+        try:
+            shutil.rmtree(session_dir)
+        except Exception:
+            pass
+    global_meta = load_global_meta()
+    if session_id in global_meta:
+        del global_meta[session_id]
+        save_global_meta(global_meta)
+
+def cleanup_unnamed_sessions():
+    """Xóa tất cả các phiên không có Name và không có Category"""
+    dirs = glob.glob(os.path.join(BRAIN_DIR, "*"))
+    global_meta = load_global_meta()
+    
+    deleted_count = 0
+    for d in dirs:
+        if not os.path.isdir(d):
+            continue
+        conv_id = os.path.basename(d)
+        meta = get_session_meta(conv_id, global_meta)
+        name = meta.get("name", "").strip()
+        cat = meta.get("category", "").strip()
+        
+        if not name and not cat:
+            try:
+                shutil.rmtree(d)
+                deleted_count += 1
+                if conv_id in global_meta:
+                    del global_meta[conv_id]
+            except Exception:
+                pass
+                
+    save_global_meta(global_meta)
+    return deleted_count
+
+def get_sessions(limit=MAX_LOGS, filter_category=None):
+    dirs = glob.glob(os.path.join(BRAIN_DIR, "*"))
+    sessions = []
+    global_meta = load_global_meta()
+    
+    for d in dirs:
+        if not os.path.isdir(d):
+            continue
+        conv_id = os.path.basename(d)
+        log_file = os.path.join(d, ".system_generated", "logs", "transcript.jsonl")
+        if not os.path.exists(log_file):
+            continue
+        
+        mtime = os.path.getmtime(log_file)
+        first_prompt = "No message"
+        msg_count = 0
+        
+        try:
+            with open(log_file, "r", encoding="utf-8", errors="ignore") as f:
+                for line in f:
+                    try:
+                        data = json.loads(line)
+                        msg_type = data.get("type", "")
+                        if msg_type == "USER_INPUT":
+                            msg_count += 1
+                            if first_prompt == "No message":
+                                content = data.get("content", "")
+                                if "<USER_REQUEST>" in content:
+                                    first_prompt = content.split("<USER_REQUEST>")[1].split("</USER_REQUEST>")[0].strip()
+                                else:
+                                    first_prompt = content.strip().split("\n")[0]
+                        elif msg_type == "PLANNER_RESPONSE":
+                            msg_count += 1
+                    except Exception:
+                        pass
+        except Exception:
+            pass
+        
+        first_prompt_clean = " ".join(first_prompt.split())
+        meta = get_session_meta(conv_id, global_meta)
+        category = meta.get("category", "")
+        custom_name = meta.get("name", "")
+        
+        if filter_category:
+            if filter_category.lower() == "none" or filter_category.lower() == "chưa phân loại":
+                if category:
+                    continue
+            elif category.lower() != filter_category.lower():
+                continue
+                
+        sessions.append({
+            "id": conv_id,
+            "mtime": mtime,
+            "prompt": first_prompt_clean,
+            "custom_name": custom_name,
+            "msg_count": msg_count,
+            "category": category,
+            "log_path": log_file
+        })
+        
+    sessions.sort(key=lambda x: x["mtime"], reverse=True)
+    return sessions[:limit]
+
+def get_all_categories():
+    global_meta = load_global_meta()
+    cats = {}
+    dirs = glob.glob(os.path.join(BRAIN_DIR, "*"))
+    uncategorized = 0
+    
+    for d in dirs:
+        if not os.path.isdir(d):
+            continue
+        conv_id = os.path.basename(d)
+        log_file = os.path.join(d, ".system_generated", "logs", "transcript.jsonl")
+        if not os.path.exists(log_file):
+            continue
+        
+        meta = get_session_meta(conv_id, global_meta)
+        cat = meta.get("category", "").strip()
+        if cat:
+            cats[cat] = cats.get(cat, 0) + 1
+        else:
+            uncategorized += 1
+            
+    return cats, uncategorized
+
+def format_category_tag(cat):
+    if not cat:
+        return f"{DIM}[-]{RESET}"
+    cat_lower = cat.lower()
+    color = CATEGORY_COLORS.get(cat_lower, MAGENTA)
+    return f"{color}[{cat}]{RESET}"
+
+def show_summary(count=3):
+    sessions = get_sessions(min(count, MAX_LOGS))
+    if not sessions:
+        return
+    
+    width = 78
+    print(f"\n{BLUE}╭─ 🤖 {BOLD}Antigravity CLI (agy) - Phiên gần nhất{RESET}{BLUE} " + "─" * (width - 43) + "╮" + RESET)
+    for idx, s in enumerate(sessions, 1):
+        dt = datetime.fromtimestamp(s["mtime"]).strftime("%H:%M %d/%m")
+        cat_str = f"[{s['category']}] " if s['category'] else ""
+        
+        if s["custom_name"]:
+            display_text = f"{BOLD}{s['custom_name']}{RESET} {DIM}({s['prompt'][:25]}...){RESET}"
+            plain_display = f"{cat_str}{s['custom_name']} ({s['prompt'][:25]}...)"
+        else:
+            display_text = s["prompt"]
+            plain_display = f"{cat_str}{s['prompt']}"
+            
+        if len(plain_display) > 46:
+            plain_display = plain_display[:43] + "..."
+            if s["custom_name"]:
+                display_text = f"{cat_str}{BOLD}{s['custom_name'][:40]}{RESET}"
+            else:
+                display_text = f"{cat_str}{s['prompt'][:43]}..."
+        else:
+            display_text = f"{cat_str}{display_text}"
+            
+        line_content = f" {CYAN}[{idx}]{RESET} {DIM}{dt}{RESET} │ {display_text}"
+        plain_len = len(f" [{idx}] {dt} │ {plain_display}")
+        padding = " " * max(0, width - plain_len - 2)
+        print(f"{BLUE}│{RESET}{line_content}{padding}{BLUE}│{RESET}")
+    
+    tip = f" {YELLOW}💡 Gõ {BOLD}agy-history{RESET}{YELLOW} để xem tối đa 15 log hoặc đổi tên/category{RESET}"
+    plain_tip = " 💡 Gõ agy-history để xem tối đa 15 log hoặc đổi tên/category"
+    tip_pad = " " * max(0, width - len(plain_tip) - 2)
+    print(f"{BLUE}├" + "─" * (width - 2) + f"┤{RESET}")
+    print(f"{BLUE}│{RESET}{tip}{tip_pad}{BLUE}│{RESET}")
+    print(f"{BLUE}╰" + "─" * (width - 2) + "╯" + RESET)
+
+def prompt_on_exit():
+    # Tự động dọn dẹp các phiên rác cũ nếu có
+    cleanup_unnamed_sessions()
+    
+    sessions = get_sessions(1)
+    if not sessions:
+        return
+    latest = sessions[0]
+    
+    # Chỉ hỏi nếu phiên vừa kết thúc trong vòng 5 phút
+    if (datetime.now().timestamp() - latest["mtime"]) > 300:
+        return
+        
+    print(f"\n{BLUE}╭─ 📝 {BOLD}Lưu thông tin phiên AGY vừa kết thúc{RESET}{BLUE} ───────────────────────╮{RESET}")
+    print(f"{BLUE}│{RESET} ID: {CYAN}{latest['id'][:8]}{RESET} │ Câu hỏi: {DIM}{latest['prompt'][:48]}...{RESET}")
+    current_name = latest['custom_name'] if latest['custom_name'] else "(chưa đặt)"
+    current_cat = latest['category'] if latest['category'] else "(chưa có)"
+    print(f"{BLUE}│{RESET} Tên hiện tại: {BOLD}{current_name}{RESET} │ Category: {MAGENTA}{current_cat}{RESET}")
+    print(f"{BLUE}╰────────────────────────────────────────────────────────────────────────╯{RESET}")
+    
+    try:
+        name_prompt = f"{GREEN}👉 Đặt Tên gợi nhớ{RESET} [Enter để bỏ qua/xóa rác]: "
+        new_name = input(name_prompt).strip()
+        
+        cat_prompt = f"{YELLOW}👉 Đặt Category{RESET} (VD: study, work, debug...) [Enter để bỏ qua]: "
+        new_cat = input(cat_prompt).strip()
+        
+        if new_name or new_cat:
+            if new_name:
+                update_session_meta(latest["id"], name=new_name)
+            if new_cat:
+                update_session_meta(latest["id"], category=new_cat)
+            print(f"{GREEN}✓ Đã lưu thông tin phiên chat thành công!{RESET}\n")
+        else:
+            # Nếu cả 2 đều không đặt và phiên này chưa từng có name/category -> xóa luôn để giữ tối đa 15 log sạch
+            if not latest['custom_name'] and not latest['category']:
+                delete_session(latest["id"])
+                print(f"{DIM}• Đã tự động xóa phiên tạm không đặt tên/category.{RESET}\n")
+    except (KeyboardInterrupt, EOFError):
+        print()
+
+def view_log(session):
+    log_file = session["log_path"]
+    full_log_file = log_file.replace("transcript.jsonl", "transcript_full.jsonl")
+    target_file = full_log_file if os.path.exists(full_log_file) else log_file
+    
+    name_info = f" | Tên: {BOLD}{session['custom_name']}{RESET}" if session['custom_name'] else ""
+    cat_info = f" | Category: {MAGENTA}{session['category']}{RESET}" if session['category'] else ""
+    formatted_output = []
+    formatted_output.append(f"{BOLD}{BLUE}========================================================================{RESET}")
+    formatted_output.append(f"{BOLD}Phiên ID: {CYAN}{session['id']}{RESET}{name_info}{cat_info}")
+    formatted_output.append(f"{BOLD}Thời gian: {YELLOW}{datetime.fromtimestamp(session['mtime']).strftime('%Y-%m-%d %H:%M:%S')}{RESET}")
+    formatted_output.append(f"{BOLD}{BLUE}========================================================================{RESET}\n")
+    
+    try:
+        with open(target_file, "r", encoding="utf-8", errors="ignore") as f:
+            for line in f:
+                try:
+                    data = json.loads(line)
+                    src = data.get("source", "")
+                    mtype = data.get("type", "")
+                    content = data.get("content", "")
+                    
+                    if mtype == "USER_INPUT":
+                        if "<USER_REQUEST>" in content:
+                            req = content.split("<USER_REQUEST>")[1].split("</USER_REQUEST>")[0].strip()
+                        else:
+                            req = content.strip()
+                        formatted_output.append(f"{BOLD}{CYAN}👤 BẠN (User):{RESET}")
+                        formatted_output.append(f"{req}\n")
+                    elif mtype == "PLANNER_RESPONSE":
+                        tool_calls = data.get("tool_calls", [])
+                        if content:
+                            formatted_output.append(f"{BOLD}{GREEN}🤖 AGY:{RESET}")
+                            formatted_output.append(f"{content.strip()}\n")
+                        if tool_calls:
+                            for tc in tool_calls:
+                                name = tc.get("name", "")
+                                summary = tc.get("args", {}).get("toolSummary", name)
+                                formatted_output.append(f"{DIM}{YELLOW}  ⚡ [Tool: {name}] {summary}{RESET}")
+                except Exception:
+                    pass
+    except Exception as e:
+        formatted_output.append(f"{MAGENTA}Lỗi khi đọc file log: {e}{RESET}")
+    
+    full_text = "\n".join(formatted_output)
+    
+    try:
+        p = subprocess.Popen(["less", "-R"], stdin=subprocess.PIPE, encoding="utf-8")
+        p.communicate(full_text)
+    except Exception:
+        print(full_text)
+
+def resume_session(session_id):
+    print(f"\n{GREEN}Đang tiếp tục phiên chat: {BOLD}{session_id}{RESET}...")
+    cmd = ["agy", "--conversation", session_id]
+    try:
+        os.execvp("agy", cmd)
+    except FileNotFoundError:
+        print(f"Lỗi: Không tìm thấy lệnh 'agy' trong PATH!")
+
+def interactive_menu():
+    active_filter = None
+    
+    while True:
+        sessions = get_sessions(MAX_LOGS, filter_category=active_filter)
+        filter_badge = f" {MAGENTA}[Lọc: {active_filter}]{RESET}" if active_filter else ""
+        
+        print(f"\n{BOLD}{MAGENTA}📜 DANH SÁCH CÁC PHIÊN CHAT AGY (Tối đa {MAX_LOGS} log){RESET}{filter_badge}:")
+        print(f"{DIM}" + "─" * 86 + f"{RESET}")
+        print(f"{BOLD}{'STT':<4} {'Thời gian':<13} {'Category':<13} {'ID':<9} {'Tên phiên / Tóm tắt'}{RESET}")
+        print(f"{DIM}" + "─" * 86 + f"{RESET}")
+        
+        if not sessions:
+            print(f"{YELLOW}  Không có phiên nào phù hợp.{RESET}")
+        else:
+            for idx, s in enumerate(sessions, 1):
+                dt = datetime.fromtimestamp(s["mtime"]).strftime("%d/%m %H:%M")
+                short_id = s["id"][:8]
+                cat_colored = format_category_tag(s["category"])
+                
+                if s["custom_name"]:
+                    name_display = f"{BOLD}{CYAN}{s['custom_name']}{RESET}"
+                    snippet_part = f" {DIM}({s['prompt'][:25]}...){RESET}" if len(s['prompt']) > 0 else ""
+                    summary_text = name_display + snippet_part
+                else:
+                    snippet = s["prompt"]
+                    if len(snippet) > 42:
+                        snippet = snippet[:39] + "..."
+                    summary_text = snippet
+                    
+                print(f"{CYAN}{idx:<4}{RESET} {DIM}{dt:<13}{RESET} {cat_colored:<22} {YELLOW}{short_id}{RESET} {summary_text}")
+            
+        print(f"{DIM}" + "─" * 86 + f"{RESET}")
+        print(f"{BOLD}Thao tác nhanh:{RESET}")
+        print(f"  • Nhập {CYAN}<STT>{RESET}             : Chọn phiên (Chat tiếp / Xem log / Đổi tên / Đổi category / Xóa)")
+        print(f"  • Nhập {GREEN}r <STT> <tên_mới>{RESET}   : Đổi tên nhanh (VD: {GREEN}r 1 Tối ưu game{RESET})")
+        print(f"  • Nhập {YELLOW}t <STT> <category>{RESET}  : Gán category nhanh (VD: {YELLOW}t 1 study{RESET})")
+        print(f"  • Nhập {MAGENTA}f{RESET}                 : Lọc theo Category")
+        print(f"  • Nhập {RED}clean{RESET}             : Xóa tất cả các phiên chưa có Tên/Category")
+        print(f"  • Nhập {CYAN}q{RESET}                 : Thoát\n")
+        
+        raw_choice = input(f"{BOLD}Chọn thao tác: {RESET}").strip()
+        if not raw_choice or raw_choice.lower() in ["q", "exit", "quit"]:
+            break
+            
+        if raw_choice.lower() == "clean":
+            count = cleanup_unnamed_sessions()
+            print(f"{GREEN}✓ Đã dọn dẹp {count} phiên không có Name/Category!{RESET}")
+            continue
+
+        parts = raw_choice.split()
+        
+        # Fast rename command: r <stt> <new name>
+        if parts[0].lower() == "r" and len(parts) >= 3:
+            if parts[1].isdigit():
+                idx = int(parts[1]) - 1
+                if 0 <= idx < len(sessions):
+                    new_name = " ".join(parts[2:])
+                    update_session_meta(sessions[idx]["id"], name=new_name)
+                    print(f"{GREEN}✓ Đã đổi tên phiên #{parts[1]} thành: \"{new_name}\"!{RESET}")
+                    continue
+            print(f"{RED}Lệnh không hợp lệ. Ví dụ: r 1 Sửa lỗi wifi{RESET}")
+            continue
+            
+        # Fast tag command: t <stt> <cat_name>
+        if parts[0].lower() == "t" and len(parts) >= 3:
+            if parts[1].isdigit():
+                idx = int(parts[1]) - 1
+                if 0 <= idx < len(sessions):
+                    cat_name = " ".join(parts[2:])
+                    update_session_meta(sessions[idx]["id"], category=cat_name)
+                    print(f"{GREEN}✓ Đã gán category [{cat_name}] cho phiên #{parts[1]}!{RESET}")
+                    continue
+            print(f"{RED}Lệnh không hợp lệ. Ví dụ: t 1 study{RESET}")
+            continue
+
+        # Filter command
+        if parts[0].lower() == "f":
+            cats, uncategorized = get_all_categories()
+            cat_list = list(cats.keys())
+            print(f"\n{BOLD}📂 DANH SÁCH CATEGORIES HIỆN CÓ:{RESET}")
+            print(f"  {CYAN}[0]{RESET} Tất cả (Bỏ lọc)")
+            for c_idx, c_name in enumerate(cat_list, 1):
+                print(f"  {CYAN}[{c_idx}]{RESET} {format_category_tag(c_name)} ({cats[c_name]} phiên)")
+            if uncategorized > 0:
+                print(f"  {CYAN}[{len(cat_list)+1}]{RESET} {DIM}[Chưa phân loại]{RESET} ({uncategorized} phiên)")
+                
+            f_choice = input(f"\n{BOLD}Chọn category để lọc [0-{len(cat_list)+1}]: {RESET}").strip()
+            if f_choice == "0":
+                active_filter = None
+            elif f_choice.isdigit():
+                num = int(f_choice)
+                if 1 <= num <= len(cat_list):
+                    active_filter = cat_list[num - 1]
+                elif num == len(cat_list) + 1:
+                    active_filter = "Chưa phân loại"
+            continue
+            
+        if not raw_choice.isdigit() or int(raw_choice) < 1 or int(raw_choice) > len(sessions):
+            print(f"{YELLOW}Lựa chọn không hợp lệ! Vui lòng thử lại.{RESET}")
+            continue
+            
+        selected = sessions[int(raw_choice) - 1]
+        
+        cat_display = f" [{selected['category']}]" if selected['category'] else " [Chưa phân loại]"
+        name_display = f" \"{selected['custom_name']}\"" if selected['custom_name'] else ""
+        print(f"\n{BOLD}Bạn đã chọn phiên #{raw_choice}:{RESET} {CYAN}{selected['id']}{RESET}{GREEN}{name_display}{RESET}{MAGENTA}{cat_display}{RESET}")
+        print(f"  {DIM}Nội dung: {selected['prompt'][:70]}...{RESET}\n")
+        print(f"  {GREEN}[1] Tiếp tục chat với phiên này (agy --conversation){RESET}")
+        print(f"  {BLUE}[2] Xem lại toàn bộ lịch sử / log trên Terminal{RESET}")
+        print(f"  {CYAN}[3] Đặt / Đổi Tên gợi nhớ (Rename){RESET}")
+        print(f"  {YELLOW}[4] Đặt / Đổi Category (Phân loại){RESET}")
+        print(f"  {RED}[5] Xóa phiên này{RESET}")
+        print(f"  {MAGENTA}[6] Quay lại danh sách{RESET}")
+        
+        action = input(f"\n{BOLD}Chọn hành động [1/2/3/4/5/6]: {RESET}").strip()
+        if action == "1":
+            resume_session(selected["id"])
+            break
+        elif action == "2":
+            view_log(selected)
+        elif action == "3":
+            new_name = input(f"{BOLD}Nhập Tên mới cho phiên này (Enter để xóa tên): {RESET}").strip()
+            update_session_meta(selected["id"], name=new_name)
+            print(f"{GREEN}✓ Đã cập nhật tên thành công!{RESET}")
+        elif action == "4":
+            new_cat = input(f"{BOLD}Nhập tên Category mới cho phiên này (VD: study, work, debug...): {RESET}").strip()
+            update_session_meta(selected["id"], category=new_cat)
+            print(f"{GREEN}✓ Đã cập nhật category thành: [{new_cat}]{RESET}")
+        elif action == "5":
+            confirm = input(f"{RED}Bạn có chắc muốn xóa phiên này? (y/N): {RESET}").strip().lower()
+            if confirm in ["y", "yes"]:
+                delete_session(selected["id"])
+                print(f"{GREEN}✓ Đã xóa phiên thành công!{RESET}")
+        else:
+            continue
+
+def main():
+    if len(sys.argv) > 1:
+        arg = sys.argv[1]
+        if arg == "--on-exit":
+            prompt_on_exit()
+            return
+        elif arg in ["--clean", "--cleanup"]:
+            count = cleanup_unnamed_sessions()
+            print(f"{GREEN}✓ Đã xóa {count} phiên không có Tên/Category!{RESET}")
+            return
+        elif arg in ["--summary", "-s"]:
+            count = int(sys.argv[2]) if len(sys.argv) > 2 and sys.argv[2].isdigit() else 3
+            show_summary(count)
+            return
+        elif arg in ["--rename", "-r", "-n"] and len(sys.argv) > 3:
+            target = sys.argv[2]
+            new_name = " ".join(sys.argv[3:])
+            sessions = get_sessions(100)
+            target_id = None
+            if target.isdigit():
+                idx = int(target) - 1
+                if 0 <= idx < len(sessions):
+                    target_id = sessions[idx]["id"]
+            else:
+                for s in sessions:
+                    if s["id"].startswith(target):
+                        target_id = s["id"]
+                        break
+            if target_id:
+                update_session_meta(target_id, name=new_name)
+                print(f"{GREEN}✓ Đã đổi tên phiên {target_id[:8]} thành: \"{new_name}\"!{RESET}")
+            else:
+                print(f"{RED}Không tìm thấy phiên tương ứng với: {target}{RESET}")
+            return
+        elif arg in ["--tag", "-t"] and len(sys.argv) > 3:
+            target = sys.argv[2]
+            new_cat = " ".join(sys.argv[3:])
+            sessions = get_sessions(100)
+            target_id = None
+            if target.isdigit():
+                idx = int(target) - 1
+                if 0 <= idx < len(sessions):
+                    target_id = sessions[idx]["id"]
+            else:
+                for s in sessions:
+                    if s["id"].startswith(target):
+                        target_id = s["id"]
+                        break
+            if target_id:
+                update_session_meta(target_id, category=new_cat)
+                print(f"{GREEN}✓ Đã gán category [{new_cat}] cho phiên {target_id[:8]}!{RESET}")
+            else:
+                print(f"{RED}Không tìm thấy phiên tương ứng với: {target}{RESET}")
+            return
+        elif arg in ["--category", "-c"] and len(sys.argv) > 2:
+            cat = sys.argv[2]
+            sessions = get_sessions(MAX_LOGS, filter_category=cat)
+            print(f"\n{BOLD}Danh sách phiên thuộc category: [{cat}]{RESET}")
+            for idx, s in enumerate(sessions, 1):
+                dt = datetime.fromtimestamp(s["mtime"]).strftime("%d/%m %H:%M")
+                name_disp = f" | \"{s['custom_name']}\"" if s['custom_name'] else ""
+                print(f"[{idx}] {dt} | {s['id'][:8]}{name_disp} | {s['prompt'][:50]}")
+            return
+        elif arg in ["--view", "-v"] and len(sys.argv) > 2:
+            target = sys.argv[2]
+            sessions = get_sessions(MAX_LOGS)
+            if target.isdigit():
+                idx = int(target) - 1
+                if 0 <= idx < len(sessions):
+                    view_log(sessions[idx])
+                    return
+            for s in sessions:
+                if s["id"].startswith(target):
+                    view_log(s)
+                    return
+            print(f"Không tìm thấy phiên có ID: {target}")
+            return
+        elif arg in ["--resume"] and len(sys.argv) > 2:
+            target = sys.argv[2]
+            sessions = get_sessions(MAX_LOGS)
+            if target.isdigit():
+                idx = int(target) - 1
+                if 0 <= idx < len(sessions):
+                    resume_session(sessions[idx]["id"])
+                    return
+            for s in sessions:
+                if s["id"].startswith(target):
+                    resume_session(s["id"])
+                    return
+            resume_session(target)
+            return
+        elif arg in ["--help", "-h"]:
+            print(f"{BOLD}Cách sử dụng agy-history:{RESET}")
+            print(f"  agy-history                     : Mở menu tương tác (Tối đa {MAX_LOGS} log)")
+            print(f"  agy-history --clean             : Xóa tất cả các phiên chưa có Tên/Category")
+            print(f"  agy-history -n <stt> <tên_mới>  : Đặt tên / rename phiên (VD: agy-history -n 1 'Sửa wifi')")
+            print(f"  agy-history -t <stt> <category> : Gán category cho phiên (VD: agy-history -t 1 study)")
+            print(f"  agy-history -c <category>       : Lọc các phiên theo category")
+            print(f"  agy-history --summary           : In tóm tắt phiên gần nhất")
+            print(f"  agy-history --view <stt>        : Xem log phiên số <stt>")
+            print(f"  agy-history --resume <stt>      : Tiếp tục phiên số <stt>")
+            return
+
+    interactive_menu()
+
+if __name__ == "__main__":
+    try:
+        main()
+    except KeyboardInterrupt:
+        print("\nĐã hủy.")
