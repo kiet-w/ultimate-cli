@@ -250,16 +250,13 @@ def show_summary(count=3):
     print(f"{BLUE}╰" + "─" * (width - 2) + "╯" + RESET)
 
 def prompt_on_exit():
-    # Tự động dọn dẹp các phiên rác cũ nếu có
-    cleanup_unnamed_sessions()
-    
     sessions = get_sessions(1)
     if not sessions:
         return
     latest = sessions[0]
     
-    # Chỉ hỏi nếu phiên vừa kết thúc trong vòng 5 phút
-    if (datetime.now().timestamp() - latest["mtime"]) > 300:
+    # Bỏ qua nếu phiên này không có tin nhắn nào
+    if latest.get("msg_count", 0) == 0:
         return
         
     print(f"\n{BLUE}╭─ 📝 {BOLD}Lưu thông tin phiên AGY vừa kết thúc{RESET}{BLUE} ───────────────────────╮{RESET}")
@@ -270,25 +267,23 @@ def prompt_on_exit():
     print(f"{BLUE}╰────────────────────────────────────────────────────────────────────────╯{RESET}")
     
     try:
-        name_prompt = f"{GREEN}👉 Đặt Tên gợi nhớ{RESET} [Enter để bỏ qua/xóa rác]: "
+        name_prompt = f"{GREEN}👉 Đặt Tên gợi nhớ{RESET} [Enter để bỏ qua]: "
         new_name = input(name_prompt).strip()
         
         cat_prompt = f"{YELLOW}👉 Đặt Category{RESET} (VD: study, work, debug...) [Enter để bỏ qua]: "
         new_cat = input(cat_prompt).strip()
         
+        if new_name:
+            update_session_meta(latest["id"], name=new_name)
+        if new_cat:
+            update_session_meta(latest["id"], category=new_cat)
+            
         if new_name or new_cat:
-            if new_name:
-                update_session_meta(latest["id"], name=new_name)
-            if new_cat:
-                update_session_meta(latest["id"], category=new_cat)
             print(f"{GREEN}✓ Đã lưu thông tin phiên chat thành công!{RESET}\n")
         else:
-            # Nếu cả 2 đều không đặt và phiên này chưa từng có name/category -> xóa luôn để giữ tối đa 15 log sạch
-            if not latest['custom_name'] and not latest['category']:
-                delete_session(latest["id"])
-                print(f"{DIM}• Đã tự động xóa phiên tạm không đặt tên/category.{RESET}\n")
+            print(f"{DIM}• Đã bỏ qua đặt tên/category cho phiên này.{RESET}\n")
     except (KeyboardInterrupt, EOFError):
-        print()
+        print("\n")
 
 def view_log(session):
     log_file = session["log_path"]
