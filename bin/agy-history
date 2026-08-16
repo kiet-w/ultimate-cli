@@ -337,9 +337,12 @@ def view_log(session):
     except Exception:
         print(full_text)
 
-def resume_session(session_id):
-    print(f"\n{GREEN}Đang tiếp tục phiên chat: {BOLD}{session_id}{RESET}...")
+def resume_session(session_id, yolo=False):
+    mode_text = f"{MAGENTA}(Chế độ YOLO - Tự động cấp quyền){RESET}" if yolo else f"{CYAN}(Chế độ Thường){RESET}"
+    print(f"\n{GREEN}Đang tiếp tục phiên chat: {BOLD}{session_id}{RESET} {mode_text}...")
     cmd = ["agy", "--conversation", session_id]
+    if yolo:
+        cmd.append("--yolo")
     try:
         os.execvp("agy", cmd)
     except FileNotFoundError:
@@ -379,10 +382,11 @@ def interactive_menu():
             
         print(f"{DIM}" + "─" * 86 + f"{RESET}")
         print(f"{BOLD}Thao tác nhanh:{RESET}")
-        print(f"  • Nhập {CYAN}<STT>{RESET}             : Chọn phiên (Chat tiếp / Xem log / Đổi tên / Đổi category / Xóa)")
+        print(f"  • Nhập {CYAN}<STT>{RESET}             : Chọn phiên (Mở tùy chọn Chat / Log / Đổi tên)")
+        print(f"  • Nhập {MAGENTA}y <STT>{RESET}           : Chat ngay phiên ở chế độ {MAGENTA}YOLO (agy --yolo){RESET}")
         print(f"  • Nhập {GREEN}r <STT> <tên_mới>{RESET}   : Đổi tên nhanh (VD: {GREEN}r 1 Tối ưu game{RESET})")
         print(f"  • Nhập {YELLOW}t <STT> <category>{RESET}  : Gán category nhanh (VD: {YELLOW}t 1 study{RESET})")
-        print(f"  • Nhập {MAGENTA}f{RESET}                 : Lọc theo Category")
+        print(f"  • Nhập {CYAN}f{RESET}                 : Lọc theo Category")
         print(f"  • Nhập {RED}clean{RESET}             : Xóa tất cả các phiên chưa có Tên/Category")
         print(f"  • Nhập {CYAN}q{RESET}                 : Thoát\n")
         
@@ -397,6 +401,16 @@ def interactive_menu():
 
         parts = raw_choice.split()
         
+        # Fast YOLO resume command: y <stt>
+        if parts[0].lower() == "y" and len(parts) >= 2:
+            if parts[1].isdigit():
+                idx = int(parts[1]) - 1
+                if 0 <= idx < len(sessions):
+                    resume_session(sessions[idx]["id"], yolo=True)
+                    break
+            print(f"{RED}STT không hợp lệ. Ví dụ: y 1{RESET}")
+            continue
+
         # Fast rename command: r <stt> <new name>
         if parts[0].lower() == "r" and len(parts) >= 3:
             if parts[1].isdigit():
@@ -453,28 +467,32 @@ def interactive_menu():
         name_display = f" \"{selected['custom_name']}\"" if selected['custom_name'] else ""
         print(f"\n{BOLD}Bạn đã chọn phiên #{raw_choice}:{RESET} {CYAN}{selected['id']}{RESET}{GREEN}{name_display}{RESET}{MAGENTA}{cat_display}{RESET}")
         print(f"  {DIM}Nội dung: {selected['prompt'][:70]}...{RESET}\n")
-        print(f"  {GREEN}[1] Tiếp tục chat với phiên này (agy --conversation){RESET}")
-        print(f"  {BLUE}[2] Xem lại toàn bộ lịch sử / log trên Terminal{RESET}")
-        print(f"  {CYAN}[3] Đặt / Đổi Tên gợi nhớ (Rename){RESET}")
-        print(f"  {YELLOW}[4] Đặt / Đổi Category (Phân loại){RESET}")
-        print(f"  {RED}[5] Xóa phiên này{RESET}")
-        print(f"  {MAGENTA}[6] Quay lại danh sách{RESET}")
+        print(f"  {GREEN}[1] Tiếp tục chat — Chế độ Thường (agy){RESET}")
+        print(f"  {MAGENTA}[2] Tiếp tục chat — Chế độ YOLO / Auto-approve (agy --yolo){RESET}")
+        print(f"  {BLUE}[3] Xem lại toàn bộ lịch sử / log trên Terminal{RESET}")
+        print(f"  {CYAN}[4] Đặt / Đổi Tên gợi nhớ (Rename){RESET}")
+        print(f"  {YELLOW}[5] Đặt / Đổi Category (Phân loại){RESET}")
+        print(f"  {RED}[6] Xóa phiên này{RESET}")
+        print(f"  {DIM}[7] Quay lại danh sách{RESET}")
         
-        action = input(f"\n{BOLD}Chọn hành động [1/2/3/4/5/6]: {RESET}").strip()
+        action = input(f"\n{BOLD}Chọn hành động [1/2/3/4/5/6/7]: {RESET}").strip()
         if action == "1":
-            resume_session(selected["id"])
+            resume_session(selected["id"], yolo=False)
             break
         elif action == "2":
-            view_log(selected)
+            resume_session(selected["id"], yolo=True)
+            break
         elif action == "3":
+            view_log(selected)
+        elif action == "4":
             new_name = input(f"{BOLD}Nhập Tên mới cho phiên này (Enter để xóa tên): {RESET}").strip()
             update_session_meta(selected["id"], name=new_name)
             print(f"{GREEN}✓ Đã cập nhật tên thành công!{RESET}")
-        elif action == "4":
+        elif action == "5":
             new_cat = input(f"{BOLD}Nhập tên Category mới cho phiên này (VD: study, work, debug...): {RESET}").strip()
             update_session_meta(selected["id"], category=new_cat)
             print(f"{GREEN}✓ Đã cập nhật category thành: [{new_cat}]{RESET}")
-        elif action == "5":
+        elif action == "6":
             confirm = input(f"{RED}Bạn có chắc muốn xóa phiên này? (y/N): {RESET}").strip().lower()
             if confirm in ["y", "yes"]:
                 delete_session(selected["id"])
@@ -559,30 +577,46 @@ def main():
                     return
             print(f"Không tìm thấy phiên có ID: {target}")
             return
-        elif arg in ["--resume"] and len(sys.argv) > 2:
+        elif arg in ["--resume", "-r"] and len(sys.argv) > 2:
+            target = sys.argv[2]
+            is_yolo = "--yolo" in sys.argv or "-y" in sys.argv
+            sessions = get_sessions(MAX_LOGS)
+            if target.isdigit():
+                idx = int(target) - 1
+                if 0 <= idx < len(sessions):
+                    resume_session(sessions[idx]["id"], yolo=is_yolo)
+                    return
+            for s in sessions:
+                if s["id"].startswith(target):
+                    resume_session(s["id"], yolo=is_yolo)
+                    return
+            resume_session(target, yolo=is_yolo)
+            return
+        elif arg in ["-y", "--yolo"] and len(sys.argv) > 2:
             target = sys.argv[2]
             sessions = get_sessions(MAX_LOGS)
             if target.isdigit():
                 idx = int(target) - 1
                 if 0 <= idx < len(sessions):
-                    resume_session(sessions[idx]["id"])
+                    resume_session(sessions[idx]["id"], yolo=True)
                     return
             for s in sessions:
                 if s["id"].startswith(target):
-                    resume_session(s["id"])
+                    resume_session(s["id"], yolo=True)
                     return
-            resume_session(target)
+            resume_session(target, yolo=True)
             return
         elif arg in ["--help", "-h"]:
             print(f"{BOLD}Cách sử dụng agy-history:{RESET}")
             print(f"  agy-history                     : Mở menu tương tác (Tối đa {MAX_LOGS} log)")
+            print(f"  agy-history -y <stt>            : Chat ngay phiên số <stt> ở chế độ YOLO (agy --yolo)")
+            print(f"  agy-history --resume <stt>      : Tiếp tục phiên số <stt> (Chế độ Thường)")
             print(f"  agy-history --clean             : Xóa tất cả các phiên chưa có Tên/Category")
             print(f"  agy-history -n <stt> <tên_mới>  : Đặt tên / rename phiên (VD: agy-history -n 1 'Sửa wifi')")
             print(f"  agy-history -t <stt> <category> : Gán category cho phiên (VD: agy-history -t 1 study)")
             print(f"  agy-history -c <category>       : Lọc các phiên theo category")
             print(f"  agy-history --summary           : In tóm tắt phiên gần nhất")
             print(f"  agy-history --view <stt>        : Xem log phiên số <stt>")
-            print(f"  agy-history --resume <stt>      : Tiếp tục phiên số <stt>")
             return
 
     interactive_menu()
