@@ -404,6 +404,7 @@ def interactive_menu():
         print(f"  • Nhập {GREEN}r <STT> <tên_mới>{RESET}   : Đổi tên nhanh (VD: {GREEN}r 1 Tối ưu game{RESET})")
         print(f"  • Nhập {YELLOW}t <STT> <category>{RESET}  : Gán category nhanh (VD: {YELLOW}t 1 study{RESET})")
         print(f"  • Nhập {CYAN}f{RESET}                 : Lọc theo Category")
+        print(f"  • Nhập {BLUE}n{RESET}                 : Quản lý ghi chú snippet (agy-note)")
         print(f"  • Nhập {RED}clean{RESET}             : Xóa tất cả các phiên chưa có Tên/Category")
         print(f"  • Nhập {CYAN}q{RESET}                 : Thoát\n")
         
@@ -411,6 +412,13 @@ def interactive_menu():
         if not raw_choice or raw_choice.lower() in ["q", "exit", "quit"]:
             break
             
+        if raw_choice.lower() in ["n", "note", "notes"]:
+            try:
+                subprocess.run(["agy-note"])
+            except Exception as e:
+                print(f"Lỗi: {e}")
+            continue
+
         if raw_choice.lower() == "clean":
             count = cleanup_unnamed_sessions()
             print(f"{GREEN}✓ Đã dọn dẹp {count} phiên không có Name/Category!{RESET}")

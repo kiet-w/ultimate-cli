@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -e
 
-echo "🚀 Đang cài đặt Ultimate CLI (Antigravity Session Manager & Exit Hook)..."
+echo "🚀 Đang cài đặt Ultimate CLI Suite (Antigravity Session Manager & Note Hub)..."
 
 INSTALL_DIR="$HOME/.local/bin"
 mkdir -p "$INSTALL_DIR"
@@ -19,7 +19,8 @@ fi
 # 2. Cài đặt các file thực thi
 cp bin/agy "$INSTALL_DIR/agy"
 cp bin/agy-history "$INSTALL_DIR/agy-history"
-chmod +x "$INSTALL_DIR/agy" "$INSTALL_DIR/agy-history"
+cp bin/agy-note "$INSTALL_DIR/agy-note"
+chmod +x "$INSTALL_DIR/agy" "$INSTALL_DIR/agy-history" "$INSTALL_DIR/agy-note"
 
 # 3. Kiểm tra PATH
 if [[ ":$PATH:" != *":$HOME/.local/bin:"* ]]; then
@@ -29,6 +30,7 @@ if [[ ":$PATH:" != *":$HOME/.local/bin:"* ]]; then
 fi
 
 echo "✅ Cài đặt hoàn tất!"
-echo "✨ Bạn có thể sử dụng:"
-echo "   - 'agy'          : Chat với Antigravity CLI (tự động hỏi Name/Category khi thoát)."
-echo "   - 'agy-history'  : Xem danh sách tối đa 15 phiên gần nhất, đổi tên, lọc category, dọn dẹp rác."
+echo "✨ Bộ công cụ sẵn sàng sử dụng:"
+echo "   • 'agy'          : Chat với Antigravity CLI (tự động hỏi Name/Category khi thoát)."
+echo "   • 'agy-history'  : Quản lý lịch sử phiên chat, đổi tên, lọc category, xuất log."
+echo "   • 'agy-note'     : Trích xuất Snippet Note HTML, xem Split-Screen, tự động sync Cloudflare Pages."

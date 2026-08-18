@@ -1,0 +1,2436 @@
+#!/usr/bin/env python3
+"""
+agy-note: Antigravity CLI Snippet Note Manager, Multi-Note HTML Viewer & Cloud Sync
+Upgraded with UI/UX Pro Max:
+- Mobile-First & Desktop Adaptive Responsive Architecture
+- Touch-Friendly 44px Target Zones & Horizontal Scroll Chip Bars
+- Interactive Expandable Accordions (<details>/<summary>) for deep-dive branches (Kiểu A)
+- Structured Section Cards with Headers & Tags
+- Key-Value Item Badges for lists (e.g. 1.1 Purpose: ...)
+- Sticky Section Navigator (Table of Contents)
+- Markdown Table & Callout Card rendering
+- Dark OLED / Obsidian Theme with Inter & JetBrains Mono typography
+- Split View (2, 3, 4 notes simultaneously)
+- Cloud Sync (Cloudflare Pages, Vercel, Surge, GitHub Pages)
+- Permanent raw Markdown backup in notes/md/
+"""
+
+import os
+import sys
+import json
+import glob
+import re
+import html
+import shutil
+import argparse
+import subprocess
+import threading
+from datetime import datetime
+
+NOTES_DIR = os.path.expanduser("~/.gemini/antigravity-cli/notes")
+HTML_DIR = os.path.join(NOTES_DIR, "html")
+MD_DIR = os.path.join(NOTES_DIR, "md")
+META_FILE = os.path.join(NOTES_DIR, "notes_metadata.json")
+HUB_FILE = os.path.join(NOTES_DIR, "index.html")
+DEPLOY_CONFIG_FILE = os.path.join(NOTES_DIR, "deploy_config.json")
+
+# ANSI Color codes for Terminal TUI
+BOLD = "\033[1m"
+DIM = "\033[2m"
+CYAN = "\033[36m"
+GREEN = "\033[32m"
+YELLOW = "\033[33m"
+BLUE = "\033[34m"
+MAGENTA = "\033[35m"
+RED = "\033[31m"
+RESET = "\033[0m"
+
+CATEGORY_COLORS = {
+    "work": BLUE,
+    "study": GREEN,
+    "debug": RED,
+    "linux": YELLOW,
+    "backend": CYAN,
+    "frontend": MAGENTA,
+    "docker": BLUE,
+    "ai": MAGENTA,
+    "agy": CYAN,
+    "tip": GREEN,
+    "tender1-2": YELLOW,
+    "general": DIM,
+}
+
+def ensure_dirs():
+    os.makedirs(NOTES_DIR, exist_ok=True)
+    os.makedirs(HTML_DIR, exist_ok=True)
+    os.makedirs(MD_DIR, exist_ok=True)
+
+def load_metadata():
+    ensure_dirs()
+    if os.path.exists(META_FILE):
+        try:
+            with open(META_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            return []
+    return []
+
+def save_metadata(meta_list):
+    ensure_dirs()
+    try:
+        with open(META_FILE, "w", encoding="utf-8") as f:
+            json.dump(meta_list, f, indent=2, ensure_ascii=False)
+    except Exception as e:
+        print(f"{RED}Lỗi khi lưu metadata: {e}{RESET}", file=sys.stderr)
+
+def load_deploy_config():
+    ensure_dirs()
+    if os.path.exists(DEPLOY_CONFIG_FILE):
+        try:
+            with open(DEPLOY_CONFIG_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            return {}
+    return {}
+
+def save_deploy_config(cfg):
+    ensure_dirs()
+    try:
+        with open(DEPLOY_CONFIG_FILE, "w", encoding="utf-8") as f:
+            json.dump(cfg, f, indent=2, ensure_ascii=False)
+    except Exception as e:
+        print(f"{RED}Lỗi khi lưu deploy config: {e}{RESET}", file=sys.stderr)
+
+def format_category_terminal(cat):
+    if not cat:
+        return f"{DIM}[note]{RESET}"
+    color = CATEGORY_COLORS.get(cat.lower(), MAGENTA)
+    return f"{color}[{cat}]{RESET}"
+
+def format_inline_markdown(text):
+    if text.startswith("<details") or text.startswith("</details>") or text.startswith("<summary") or text.startswith("</summary>"):
+        return text
+    text = html.escape(text)
+    text = re.sub(r'`([^`]+)`', r'<code class="inline-code">\1</code>', text)
+    text = re.sub(r'\*\*([^*]+)\*\*', r'<strong>\1</strong>', text)
+    text = re.sub(r'\*([^*]+)\*', r'<em>\1</em>', text)
+    return text
+
+def parse_rich_markdown(md_text):
+    """
+    Transforms raw markdown into a visually rich, mobile-optimized card layout.
+    Supports Kiểu A: Expandable Accordion Deep-Dive Branches (<details><summary>...</summary>...</details>).
+    """
+    if not md_text:
+        return [], {"section_count": 0, "item_count": 0}, "<p class='note-pro-p'>Chưa có nội dung ghi chú.</p>"
+
+    lines = md_text.split("\n")
+    html_parts = []
+    toc = []
+    
+    in_code = False
+    code_lang = ""
+    code_buffer = []
+    
+    in_section = False
+    in_table = False
+    table_headers = []
+    table_rows = []
+
+    in_details = False
+
+    section_count = 0
+    item_count = 0
+
+    for line in lines:
+        stripped = line.strip()
+
+        # Handle Code blocks
+        if stripped.startswith("```"):
+            if in_code:
+                raw_code = "\n".join(code_buffer)
+                escaped_code = html.escape(raw_code)
+                badge = f'<span class="code-lang-badge">{html.escape(code_lang or "code")}</span>'
+                block = f'''
+                <div class="code-container">
+                    <div class="code-header">
+                        <div class="code-dots">
+                            <span class="dot dot-red"></span>
+                            <span class="dot dot-yellow"></span>
+                            <span class="dot dot-green"></span>
+                        </div>
+                        {badge}
+                        <button class="copy-btn" onclick="copyCode(this)">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                            Copy
+                        </button>
+                    </div>
+                    <pre><code class="language-{html.escape(code_lang)}">{escaped_code}</code></pre>
+                </div>
+                '''
+                html_parts.append(block)
+                in_code = False
+                code_buffer = []
+                code_lang = ""
+            else:
+                in_code = True
+                code_lang = stripped[3:].strip()
+                code_buffer = []
+            continue
+
+        if in_code:
+            code_buffer.append(line)
+            continue
+
+        # Handle <details> / <summary> Kiểu A expandable branches
+        if "<details" in stripped:
+            in_details = True
+            html_parts.append('<details class="pro-branch">')
+            continue
+        if "</details>" in stripped:
+            in_details = False
+            html_parts.append('</div></details>')
+            continue
+        if in_details and "<summary>" in stripped and "</summary>" in stripped:
+            m = re.search(r'<summary>(.*?)</summary>', stripped)
+            summary_txt = m.group(1) if m else "🔍 Xem giải thích chi tiết"
+            html_parts.append(f'''
+            <summary class="branch-toggle">
+                <svg class="chevron-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                <span class="summary-label">{format_inline_markdown(summary_txt)}</span>
+            </summary>
+            <div class="branch-content">
+            ''')
+            continue
+
+        # Handle Table parsing
+        if stripped.startswith("|") and stripped.endswith("|"):
+            cells = [c.strip() for c in stripped.strip("|").split("|")]
+            if all(set(c).issubset(set("-: ")) for c in cells):
+                continue
+            if not in_table:
+                in_table = True
+                table_headers = cells
+                table_rows = []
+            else:
+                table_rows.append(cells)
+            continue
+        else:
+            if in_table:
+                thead_html = "".join([f"<th>{format_inline_markdown(h)}</th>" for h in table_headers])
+                tbody_html = ""
+                for row in table_rows:
+                    row_cells = "".join([f"<td>{format_inline_markdown(c)}</td>" for c in row])
+                    tbody_html += f"<tr>{row_cells}</tr>"
+                tbl_block = f'''
+                <div class="table-container">
+                    <table class="pro-table">
+                        <thead><tr>{thead_html}</tr></thead>
+                        <tbody>{tbody_html}</tbody>
+                    </table>
+                </div>
+                '''
+                html_parts.append(tbl_block)
+                in_table = False
+                table_headers = []
+                table_rows = []
+
+        if stripped in ["---", "===", "──────", "------"]:
+            continue
+
+        # Section Headings (H2, H3, H4)
+        if stripped.startswith("#### ") or stripped.startswith("### ") or stripped.startswith("## "):
+            if in_section:
+                html_parts.append("</div></section>")
+                in_section = False
+
+            level = 4 if stripped.startswith("#### ") else (3 if stripped.startswith("### ") else 2)
+            title_raw = stripped[level+1:].strip()
+            
+            sec_id = re.sub(r'[^a-zA-Z0-9_-]', '', title_raw.lower().replace(' ', '-'))[:35]
+            if not sec_id:
+                sec_id = f"sec-{section_count + 1}"
+
+            section_count += 1
+            toc.append((title_raw, sec_id))
+
+            html_parts.append(f'''
+            <section class="pro-section-card" id="{sec_id}">
+                <div class="section-card-header">
+                    <div class="sec-title-group">
+                        <span class="sec-num-badge">§ {section_count}</span>
+                        <h3 class="sec-heading">{format_inline_markdown(title_raw)}</h3>
+                    </div>
+                    <a href="#{sec_id}" class="sec-anchor-link" title="Liên kết đến mục này">#</a>
+                </div>
+                <div class="section-card-body">
+            ''')
+            in_section = True
+            continue
+
+        # Top H1 Title
+        if stripped.startswith("# "):
+            html_parts.append(f'<h1 class="main-note-heading">{format_inline_markdown(stripped[2:])}</h1>')
+            continue
+
+        # Bullet List Items with Key-Value Recognition
+        if stripped.startswith("- ") or stripped.startswith("• ") or stripped.startswith("* "):
+            item_content = stripped[2:].strip()
+            item_count += 1
+
+            kv_match = re.match(r'^\*\*([^*]+)\*\*:\s*(.*)$', item_content)
+            if not kv_match:
+                kv_match = re.match(r'^([0-9]+\.[0-9]+(?:\.[0-9]+)?\s+[^:]+):\s*(.*)$', item_content)
+            if not kv_match:
+                kv_match = re.match(r'^([A-Z0-9\.\-_]{2,20}):\s*(.*)$', item_content)
+
+            is_subitem = (line.startswith("    ") or line.startswith("\t") or line.startswith("  ") or 
+                          re.match(r'^[•\-\*]\s+[0-9]+\.[0-9]+\.[0-9]+', stripped))
+
+            if kv_match:
+                key, val = kv_match.group(1), kv_match.group(2)
+                sub_cls = "sub-item" if is_subitem else ""
+                html_parts.append(f'''
+                <div class="kv-item-card {sub_cls}">
+                    <div class="kv-header">
+                        <span class="kv-badge">{format_inline_markdown(key)}</span>
+                    </div>
+                    <div class="kv-body">{format_inline_markdown(val)}</div>
+                </div>
+                ''')
+            else:
+                sub_cls = "sub-item" if is_subitem else ""
+                html_parts.append(f'''
+                <div class="plain-bullet-item {sub_cls}">
+                    <span class="bullet-dot"></span>
+                    <span class="bullet-text">{format_inline_markdown(item_content)}</span>
+                </div>
+                ''')
+            continue
+
+        # Blockquote / Callout
+        if stripped.startswith("> "):
+            quote_text = stripped[2:].strip()
+            callout_type = "info"
+            if "[!WARNING]" in quote_text or "Lưu ý:" in quote_text or "Cảnh báo:" in quote_text:
+                callout_type = "warning"
+            elif "[!TIP]" in quote_text or "Mẹo:" in quote_text or "Gợi ý:" in quote_text:
+                callout_type = "tip"
+            elif "[!SUCCESS]" in quote_text or "Thành công:" in quote_text:
+                callout_type = "success"
+
+            clean_quote = re.sub(r'\[!(NOTE|TIP|WARNING|IMPORTANT|SUCCESS)\]', '', quote_text).strip()
+            html_parts.append(f'''
+            <div class="pro-callout callout-{callout_type}">
+                <div class="callout-icon">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+                </div>
+                <div class="callout-text">{format_inline_markdown(clean_quote)}</div>
+            </div>
+            ''')
+            continue
+
+        if not stripped:
+            continue
+
+        html_parts.append(f'<p class="note-pro-p">{format_inline_markdown(stripped)}</p>')
+
+    if in_section:
+        html_parts.append("</div></section>")
+
+    if in_table:
+        thead_html = "".join([f"<th>{format_inline_markdown(h)}</th>" for h in table_headers])
+        tbody_html = ""
+        for row in table_rows:
+            row_cells = "".join([f"<td>{format_inline_markdown(c)}</td>" for c in row])
+            tbody_html += f"<tr>{row_cells}</tr>"
+        tbl_block = f'''
+        <div class="table-container">
+            <table class="pro-table">
+                <thead><tr>{thead_html}</tr></thead>
+                <tbody>{tbody_html}</tbody>
+            </table>
+        </div>
+        '''
+        html_parts.append(tbl_block)
+
+    stats = {
+        "section_count": section_count,
+        "item_count": item_count
+    }
+
+    return toc, stats, "\n".join(html_parts)
+
+def generate_single_note_html(note_data):
+    """
+    Renders standalone HTML with UI/UX Pro Max mobile-optimized responsive design.
+    """
+    raw_content = note_data.get("content", "")
+    
+    if not raw_content and note_data.get("id"):
+        md_file = os.path.join(MD_DIR, f"{note_data['id']}.md")
+        if os.path.exists(md_file):
+            try:
+                with open(md_file, "r", encoding="utf-8") as f:
+                    raw_content = f.read()
+            except Exception:
+                pass
+
+    toc, stats, body_html = parse_rich_markdown(raw_content)
+    
+    tags_html = "".join([f'<span class="tag-badge">#{html.escape(t)}</span>' for t in note_data.get("tags", [])])
+    cat = html.escape(note_data.get("category", "General"))
+    title = html.escape(note_data.get("title", "Untitled Note"))
+    created_at = note_data.get("created_at", "")
+    start_marker = html.escape(note_data.get("start_marker", "") or "")
+    end_marker = html.escape(note_data.get("end_marker", "") or "")
+    conv_id = html.escape(note_data.get("conversation_id", "") or "")
+
+    try:
+        dt_obj = datetime.fromisoformat(created_at)
+        formatted_date = dt_obj.strftime("%H:%M • %d/%m/%Y")
+    except Exception:
+        formatted_date = created_at
+
+    toc_html = ""
+    if len(toc) >= 2:
+        toc_items = "".join([f'<a href="#{sec_id}" class="toc-chip"><span class="toc-num">{idx+1}</span><span>{html.escape(stitle[:28])}</span></a>' for idx, (stitle, sec_id) in enumerate(toc)])
+        toc_html = f'''
+        <div class="toc-nav-bar">
+            <div class="toc-header">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>
+                Mục Lục Nhanh ({len(toc)})
+            </div>
+            <div class="toc-chips-scroll">
+                {toc_items}
+            </div>
+        </div>
+        '''
+
+    landmarks_html = f"""
+    <div class="landmark-box">
+        <div class="landmark-title">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
+            Mốc Trích Xuất & Bối Cảnh
+        </div>
+        <div class="landmark-grid">
+            <div class="landmark-item">
+                <span class="landmark-label">🏷️ Category:</span>
+                <span class="cat-badge">{cat}</span>
+            </div>
+            <div class="landmark-item">
+                <span class="landmark-label">⏱️ Thời gian:</span>
+                <span class="landmark-val">{formatted_date}</span>
+            </div>
+            {"<div class='landmark-item full-row'><span class='landmark-label'>🟢 Mốc đầu:</span><span class='landmark-marker start'>&ldquo;" + start_marker + "&rdquo;</span></div>" if start_marker else ""}
+            {"<div class='landmark-item full-row'><span class='landmark-label'>🔴 Mốc cuối:</span><span class='landmark-marker end'>&ldquo;" + end_marker + "&rdquo;</span></div>" if end_marker else ""}
+        </div>
+    </div>
+    """
+
+    return f"""<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
+    <title>{title} | AGY Note</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        :root {{
+            --bg-color: #090d16;
+            --surface-bg: #111827;
+            --card-bg: #151f32;
+            --card-inner: #1a263d;
+            --card-hover: #1e2c45;
+            --code-bg: #0b1120;
+            --text-primary: #f8fafc;
+            --text-secondary: #94a3b8;
+            --text-muted: #64748b;
+            --accent-blue: #38bdf8;
+            --accent-indigo: #818cf8;
+            --accent-purple: #c084fc;
+            --accent-green: #34d399;
+            --accent-orange: #fb923c;
+            --border-color: rgba(148, 163, 184, 0.14);
+            --border-glow: rgba(56, 189, 248, 0.25);
+        }}
+        * {{ box-sizing: border-box; margin: 0; padding: 0; }}
+        html {{ scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }}
+        body {{
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-primary);
+            line-height: 1.68;
+            padding: 24px 16px;
+            min-height: 100vh;
+        }}
+        .container {{
+            max-width: 900px;
+            margin: 0 auto;
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            padding: 28px 24px;
+            box-shadow: 0 20px 40px -10px rgba(0, 0, 0, 0.5);
+        }}
+        .header {{
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 18px;
+            margin-bottom: 18px;
+        }}
+        .meta-row {{
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin-bottom: 12px;
+        }}
+        .cat-badge {{
+            background: rgba(56, 189, 248, 0.12);
+            color: var(--accent-blue);
+            font-size: 11.5px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            padding: 4px 9px;
+            border-radius: 6px;
+            border: 1px solid rgba(56, 189, 248, 0.25);
+        }}
+        .date-info {{
+            font-size: 12.5px;
+            color: var(--text-muted);
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }}
+        .tags-wrapper {{
+            display: flex;
+            gap: 6px;
+            flex-wrap: wrap;
+        }}
+        .tag-badge {{
+            font-size: 11px;
+            color: var(--accent-purple);
+            background: rgba(192, 132, 252, 0.1);
+            padding: 2px 7px;
+            border-radius: 5px;
+            font-family: 'JetBrains Mono', monospace;
+        }}
+        h1.note-title {{
+            font-size: clamp(20px, 4.5vw, 27px);
+            font-weight: 800;
+            color: #ffffff;
+            line-height: 1.35;
+            letter-spacing: -0.02em;
+            word-break: break-word;
+        }}
+        .back-nav {{
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 18px;
+            flex-wrap: wrap;
+        }}
+        .back-link {{
+            color: var(--accent-blue);
+            text-decoration: none;
+            font-size: 13px;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-weight: 600;
+            padding: 8px 14px;
+            border-radius: 8px;
+            background: rgba(56, 189, 248, 0.08);
+            min-height: 38px;
+            transition: all 0.2s ease;
+        }}
+        .back-link:hover {{
+            background: rgba(56, 189, 248, 0.18);
+        }}
+        .copy-all-btn {{
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--border-color);
+            color: var(--text-secondary);
+            font-size: 12.5px;
+            font-weight: 600;
+            padding: 8px 14px;
+            border-radius: 8px;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            min-height: 38px;
+            transition: all 0.2s ease;
+        }}
+        .copy-all-btn:hover {{
+            background: rgba(255, 255, 255, 0.12);
+            color: #fff;
+        }}
+
+        .toc-nav-bar {{
+            background: rgba(11, 17, 32, 0.7);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 10px 14px;
+            margin-bottom: 20px;
+        }}
+        .toc-header {{
+            font-size: 11.5px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.6px;
+            color: var(--text-muted);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            margin-bottom: 8px;
+        }}
+        .toc-chips-scroll {{
+            display: flex;
+            gap: 8px;
+            overflow-x: auto;
+            padding-bottom: 4px;
+            -webkit-overflow-scrolling: touch;
+            scrollbar-width: none;
+        }}
+        .toc-chips-scroll::-webkit-scrollbar {{ display: none; }}
+        .toc-chip {{
+            background: var(--surface-bg);
+            border: 1px solid var(--border-color);
+            color: var(--accent-blue);
+            text-decoration: none;
+            padding: 6px 12px;
+            border-radius: 8px;
+            font-size: 12px;
+            font-weight: 600;
+            white-space: nowrap;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            flex-shrink: 0;
+            min-height: 34px;
+            transition: all 0.2s ease;
+        }}
+        .toc-chip:hover {{
+            background: rgba(56, 189, 248, 0.15);
+            border-color: var(--accent-blue);
+        }}
+        .toc-num {{
+            background: rgba(56, 189, 248, 0.2);
+            padding: 1px 5px;
+            border-radius: 4px;
+            font-size: 10.5px;
+            font-family: 'JetBrains Mono', monospace;
+        }}
+        
+        .landmark-box {{
+            background: rgba(11, 17, 32, 0.7);
+            border: 1px solid var(--border-glow);
+            border-radius: 12px;
+            padding: 14px 16px;
+            margin-bottom: 20px;
+        }}
+        .landmark-title {{
+            font-size: 11.5px;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.7px;
+            color: var(--accent-blue);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            margin-bottom: 10px;
+        }}
+        .landmark-grid {{
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 8px;
+            font-size: 12.5px;
+        }}
+        .landmark-item {{
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            flex-wrap: wrap;
+        }}
+        .landmark-item.full-row {{
+            grid-column: 1 / -1;
+            align-items: flex-start;
+        }}
+        .landmark-label {{
+            color: var(--text-muted);
+            font-weight: 600;
+            white-space: nowrap;
+        }}
+        .landmark-val {{ color: #e2e8f0; }}
+        .landmark-marker {{
+            padding: 3px 8px;
+            border-radius: 6px;
+            font-size: 12px;
+            line-height: 1.45;
+            font-family: 'JetBrains Mono', monospace;
+            word-break: break-word;
+        }}
+        .landmark-marker.start {{
+            background: rgba(52, 211, 153, 0.12);
+            color: var(--accent-green);
+            border: 1px solid rgba(52, 211, 153, 0.25);
+        }}
+        .landmark-marker.end {{
+            background: rgba(251, 146, 60, 0.12);
+            color: var(--accent-orange);
+            border: 1px solid rgba(251, 146, 60, 0.25);
+        }}
+
+        .content {{ font-size: 15px; color: #cbd5e1; }}
+        .pro-section-card {{
+            background: var(--surface-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            margin-bottom: 18px;
+            overflow: hidden;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+        }}
+        .section-card-header {{
+            background: rgba(255, 255, 255, 0.025);
+            border-bottom: 1px solid var(--border-color);
+            padding: 12px 16px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }}
+        .sec-title-group {{
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }}
+        .sec-num-badge {{
+            background: rgba(56, 189, 248, 0.15);
+            color: var(--accent-blue);
+            font-size: 11px;
+            font-weight: 800;
+            padding: 2px 7px;
+            border-radius: 5px;
+            font-family: 'JetBrains Mono', monospace;
+        }}
+        .sec-heading {{
+            font-size: 15.5px;
+            font-weight: 700;
+            color: #ffffff;
+            margin: 0;
+            line-height: 1.35;
+        }}
+        .sec-anchor-link {{
+            color: var(--text-muted);
+            text-decoration: none;
+            font-weight: 700;
+            font-size: 14px;
+            padding: 4px 6px;
+        }}
+        .sec-anchor-link:hover {{ color: var(--accent-blue); }}
+        .section-card-body {{
+            padding: 16px 14px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }}
+
+        .kv-item-card {{
+            background: var(--card-inner);
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            border-radius: 9px;
+            padding: 10px 14px;
+            transition: all 0.2s ease;
+        }}
+        .kv-item-card:hover {{
+            background: #202e48;
+            border-color: rgba(56, 189, 248, 0.2);
+        }}
+        .kv-item-card.sub-item {{
+            margin-left: 8px;
+            border-left: 3px solid var(--accent-purple);
+            background: rgba(192, 132, 252, 0.04);
+        }}
+        .kv-header {{
+            margin-bottom: 4px;
+        }}
+        .kv-badge {{
+            display: inline-block;
+            background: rgba(56, 189, 248, 0.12);
+            color: var(--accent-blue);
+            font-weight: 700;
+            font-size: 12px;
+            padding: 2px 7px;
+            border-radius: 5px;
+            font-family: 'JetBrains Mono', monospace;
+            border: 1px solid rgba(56, 189, 248, 0.2);
+        }}
+        .kv-item-card.sub-item .kv-badge {{
+            background: rgba(192, 132, 252, 0.15);
+            color: var(--accent-purple);
+            border-color: rgba(192, 132, 252, 0.3);
+        }}
+        .kv-body {{
+            font-size: 13.5px;
+            color: #d1d5db;
+            line-height: 1.6;
+            word-break: break-word;
+        }}
+
+        /* Kiểu A: Expandable Accordion Deep-Dive Branch Styles */
+        details.pro-branch {{
+            background: rgba(56, 189, 248, 0.04);
+            border: 1px dashed rgba(56, 189, 248, 0.3);
+            border-radius: 8px;
+            margin: 8px 0 4px 0;
+            overflow: hidden;
+            transition: all 0.25s ease;
+        }}
+        details.pro-branch[open] {{
+            background: rgba(15, 23, 42, 0.75);
+            border: 1px solid var(--accent-blue);
+            box-shadow: 0 4px 14px rgba(56, 189, 248, 0.12);
+        }}
+        summary.branch-toggle {{
+            cursor: pointer;
+            padding: 10px 14px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: var(--accent-blue);
+            font-size: 12.5px;
+            font-weight: 600;
+            list-style: none;
+            user-select: none;
+            min-height: 42px;
+        }}
+        summary.branch-toggle::-webkit-details-marker {{ display: none; }}
+        summary.branch-toggle:hover {{
+            background: rgba(56, 189, 248, 0.1);
+        }}
+        .chevron-icon {{
+            transition: transform 0.25s ease;
+            color: var(--accent-blue);
+            flex-shrink: 0;
+        }}
+        details[open] .chevron-icon {{
+            transform: rotate(90deg);
+        }}
+        .branch-content {{
+            padding: 12px 14px;
+            border-top: 1px solid rgba(56, 189, 248, 0.18);
+            font-size: 13.5px;
+            color: #cbd5e1;
+            line-height: 1.65;
+            animation: expandFade 0.25s ease;
+        }}
+        @keyframes expandFade {{
+            from {{ opacity: 0; transform: translateY(-4px); }}
+            to {{ opacity: 1; transform: translateY(0); }}
+        }}
+
+        .plain-bullet-item {{
+            display: flex;
+            align-items: flex-start;
+            gap: 8px;
+            padding: 4px 0;
+            font-size: 14px;
+            color: #cbd5e1;
+            word-break: break-word;
+        }}
+        .plain-bullet-item.sub-item {{
+            margin-left: 12px;
+            font-size: 13px;
+            color: #94a3b8;
+        }}
+        .bullet-dot {{
+            width: 5px;
+            height: 5px;
+            border-radius: 50%;
+            background: var(--accent-blue);
+            margin-top: 8px;
+            flex-shrink: 0;
+        }}
+        .plain-bullet-item.sub-item .bullet-dot {{
+            background: var(--accent-purple);
+        }}
+
+        .table-container {{
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+            margin: 12px 0;
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+        }}
+        .pro-table {{
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+            text-align: left;
+            min-width: 400px;
+        }}
+        .pro-table th {{
+            background: rgba(15, 23, 42, 0.9);
+            color: var(--accent-blue);
+            font-weight: 700;
+            padding: 10px 12px;
+            border-bottom: 1px solid var(--border-color);
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 11.5px;
+            text-transform: uppercase;
+        }}
+        .pro-table td {{
+            padding: 10px 12px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+            color: #cbd5e1;
+        }}
+
+        .pro-callout {{
+            display: flex;
+            gap: 10px;
+            padding: 12px 14px;
+            border-radius: 8px;
+            margin: 12px 0;
+            font-size: 13.5px;
+            line-height: 1.6;
+        }}
+        .callout-info {{
+            background: rgba(56, 189, 248, 0.08);
+            border: 1px solid rgba(56, 189, 248, 0.25);
+            color: #bae6fd;
+        }}
+        .callout-warning {{
+            background: rgba(251, 146, 60, 0.08);
+            border: 1px solid rgba(251, 146, 60, 0.25);
+            color: #fed7aa;
+        }}
+        .callout-tip {{
+            background: rgba(52, 211, 153, 0.08);
+            border: 1px solid rgba(52, 211, 153, 0.25);
+            color: #a7f3d0;
+        }}
+        .callout-icon {{ flex-shrink: 0; margin-top: 2px; }}
+
+        .inline-code {{
+            background: rgba(255, 255, 255, 0.08);
+            color: #fb7185;
+            padding: 2px 5px;
+            border-radius: 4px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12.5px;
+            word-break: break-word;
+        }}
+        
+        .code-container {{
+            background: var(--code-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            margin: 12px 0;
+            overflow: hidden;
+        }}
+        .code-header {{
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: rgba(255, 255, 255, 0.03);
+            padding: 8px 12px;
+            border-bottom: 1px solid var(--border-color);
+        }}
+        .code-dots {{ display: flex; gap: 5px; }}
+        .dot {{ width: 9px; height: 9px; border-radius: 50%; }}
+        .dot-red {{ background: #ef4444; opacity: 0.8; }}
+        .dot-yellow {{ background: #f59e0b; opacity: 0.8; }}
+        .dot-green {{ background: #10b981; opacity: 0.8; }}
+        .code-lang-badge {{
+            font-size: 10.5px;
+            text-transform: uppercase;
+            color: var(--text-muted);
+            font-weight: 700;
+            letter-spacing: 0.5px;
+            font-family: 'JetBrains Mono', monospace;
+        }}
+        .copy-btn {{
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid var(--border-color);
+            color: var(--text-secondary);
+            font-size: 11.5px;
+            padding: 4px 8px;
+            border-radius: 5px;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            min-height: 28px;
+        }}
+        .code-container pre {{
+            padding: 12px 14px;
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12.5px;
+            line-height: 1.5;
+            color: #f1f5f9;
+        }}
+        .note-pro-p {{ margin-bottom: 10px; line-height: 1.68; }}
+        footer {{
+            margin-top: 24px;
+            padding-top: 14px;
+            border-top: 1px solid var(--border-color);
+            font-size: 11.5px;
+            color: var(--text-muted);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 8px;
+        }}
+
+        .toast {{
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            left: 20px;
+            max-width: 320px;
+            margin: 0 auto;
+            background: #10b981;
+            color: #064e3b;
+            font-weight: 700;
+            font-size: 13px;
+            padding: 10px 16px;
+            border-radius: 8px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            z-index: 999;
+            animation: slideIn 0.2s ease;
+        }}
+        @keyframes slideIn {{
+            from {{ transform: translateY(20px); opacity: 0; }}
+            to {{ transform: translateY(0); opacity: 1; }}
+        }}
+
+        /* Responsive Mobile Specific Rules */
+        @media (max-width: 640px) {{
+            body {{ padding: 12px 8px 60px 8px; }}
+            .container {{ padding: 18px 12px; border-radius: 12px; }}
+            .back-nav {{ flex-direction: column; align-items: stretch; gap: 8px; }}
+            .back-link, .copy-all-btn {{ justify-content: center; width: 100%; }}
+            .section-card-header {{ padding: 10px 12px; }}
+            .section-card-body {{ padding: 12px 10px; }}
+        }}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="back-nav">
+            <a href="../index.html" class="back-link">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
+                Quay lại Web Hub
+            </a>
+            <button class="copy-all-btn" onclick="copyEntireNote(this)">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                Copy toàn bộ note
+            </button>
+        </div>
+        <div class="header">
+            <div class="meta-row">
+                <span class="cat-badge">{cat}</span>
+                <span class="date-info">{formatted_date}</span>
+                <div class="tags-wrapper">{tags_html}</div>
+            </div>
+            <h1 class="note-title">{title}</h1>
+        </div>
+
+        {toc_html}
+        {landmarks_html}
+
+        <div class="content" id="noteContentArea">
+            {body_html}
+        </div>
+        <footer>
+            <span>⚡ AGY Note Pro</span>
+            <span class="date-info">{formatted_date}</span>
+        </footer>
+    </div>
+
+    <div class="toast" id="toastMsg">✓ Đã copy vào clipboard!</div>
+
+    <script>
+        function showToast(msg) {{
+            const t = document.getElementById('toastMsg');
+            t.innerText = msg;
+            t.style.display = 'flex';
+            setTimeout(() => {{
+                t.style.display = 'none';
+            }}, 2200);
+        }}
+
+        function copyCode(button) {{
+            const container = button.closest('.code-container');
+            const codeEl = container.querySelector('code');
+            const text = codeEl.innerText;
+            navigator.clipboard.writeText(text).then(() => {{
+                const originalHtml = button.innerHTML;
+                button.innerHTML = '✓ Copied!';
+                button.style.color = '#34d399';
+                button.style.borderColor = '#34d399';
+                showToast('✓ Đã copy đoạn code!');
+                setTimeout(() => {{
+                    button.innerHTML = originalHtml;
+                    button.style.color = '';
+                    button.style.borderColor = '';
+                }}, 2000);
+            }});
+        }}
+
+        function copyEntireNote(button) {{
+            const text = document.getElementById('noteContentArea').innerText;
+            navigator.clipboard.writeText(text).then(() => {{
+                const originalText = button.innerHTML;
+                button.innerHTML = '✓ Đã Copy!';
+                button.style.color = '#34d399';
+                showToast('✓ Đã copy toàn bộ nội dung note!');
+                setTimeout(() => {{
+                    button.innerHTML = originalText;
+                    button.style.color = '';
+                }}, 2000);
+            }});
+        }}
+    </script>
+</body>
+</html>
+"""
+
+def generate_web_hub(meta_list):
+    """
+    Builds the central `index.html` Web Hub dashboard with UI/UX Pro Max mobile-first responsiveness.
+    """
+    ensure_dirs()
+    notes_json_str = json.dumps(meta_list, ensure_ascii=False)
+    deploy_cfg = load_deploy_config()
+    live_url = deploy_cfg.get("live_url", "")
+
+    cloud_badge_html = ""
+    if live_url:
+        cloud_badge_html = f'''
+        <a href="{live_url}" target="_blank" class="live-cloud-badge" title="Mở trang Cloud Public">
+            <span class="live-dot"></span>
+            <span>🌐 {html.escape(live_url.replace("https://", ""))}</span>
+        </a>
+        '''
+
+    hub_html = f"""<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
+    <title>AGY Notes Hub</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        :root {{
+            --bg-color: #090d16;
+            --surface-bg: #111827;
+            --card-bg: #151f32;
+            --card-hover: #1c2940;
+            --text-primary: #f8fafc;
+            --text-secondary: #94a3b8;
+            --text-muted: #64748b;
+            --accent-blue: #38bdf8;
+            --accent-indigo: #818cf8;
+            --accent-purple: #c084fc;
+            --accent-green: #34d399;
+            --accent-orange: #fb923c;
+            --border-color: rgba(148, 163, 184, 0.14);
+            --border-glow: rgba(56, 189, 248, 0.3);
+        }}
+        * {{ box-sizing: border-box; margin: 0; padding: 0; }}
+        html {{ scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }}
+        body {{
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-primary);
+            padding: 20px 16px 80px 16px;
+            min-height: 100vh;
+        }}
+        .container {{
+            max-width: 1200px;
+            margin: 0 auto;
+        }}
+        header {{
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 12px;
+            padding-bottom: 16px;
+            border-bottom: 1px solid var(--border-color);
+            margin-bottom: 18px;
+        }}
+        .logo-area h1 {{
+            font-size: clamp(20px, 4vw, 25px);
+            font-weight: 800;
+            background: linear-gradient(135deg, var(--accent-blue) 0%, var(--accent-purple) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            letter-spacing: -0.02em;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }}
+        .logo-area p {{
+            font-size: 12.5px;
+            color: var(--text-secondary);
+            margin-top: 3px;
+        }}
+        .header-actions {{
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+        }}
+        .live-cloud-badge {{
+            background: rgba(52, 211, 153, 0.1);
+            border: 1px solid rgba(52, 211, 153, 0.35);
+            color: var(--accent-green);
+            padding: 6px 12px;
+            border-radius: 8px;
+            font-size: 12px;
+            font-weight: 600;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            min-height: 36px;
+        }}
+        .live-dot {{
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            background: #10b981;
+            box-shadow: 0 0 6px #10b981;
+            animation: pulse 2s infinite;
+        }}
+        @keyframes pulse {{
+            0%, 100% {{ opacity: 1; transform: scale(1); }}
+            50% {{ opacity: 0.4; transform: scale(0.85); }}
+        }}
+        .split-mode-btn {{
+            background: rgba(192, 132, 252, 0.12);
+            border: 1px solid rgba(192, 132, 252, 0.4);
+            color: var(--accent-purple);
+            padding: 6px 12px;
+            border-radius: 8px;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            min-height: 36px;
+        }}
+        .split-mode-btn.active {{
+            background: var(--accent-purple);
+            color: #090d16;
+        }}
+        .stats-badge {{
+            background: var(--surface-bg);
+            border: 1px solid var(--border-color);
+            padding: 6px 10px;
+            border-radius: 8px;
+            font-size: 12px;
+            color: var(--accent-blue);
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            min-height: 36px;
+        }}
+        .controls-bar {{
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            margin-bottom: 20px;
+        }}
+        .search-box {{
+            width: 100%;
+            position: relative;
+        }}
+        .search-input {{
+            width: 100%;
+            background: var(--surface-bg);
+            border: 1px solid var(--border-color);
+            padding: 12px 16px 12px 40px;
+            border-radius: 10px;
+            color: #fff;
+            font-size: 14px;
+            outline: none;
+            transition: all 0.2s ease;
+        }}
+        .search-input:focus {{
+            border-color: var(--accent-blue);
+            box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.2);
+        }}
+        .search-icon {{
+            position: absolute;
+            left: 14px;
+            top: 13px;
+            color: var(--text-muted);
+        }}
+        .search-shortcut-hint {{
+            position: absolute;
+            right: 12px;
+            top: 11px;
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid var(--border-color);
+            padding: 2px 6px;
+            border-radius: 5px;
+            font-size: 11px;
+            color: var(--text-muted);
+            font-family: 'JetBrains Mono', monospace;
+        }}
+        .filter-tags {{
+            display: flex;
+            gap: 8px;
+            overflow-x: auto;
+            padding-bottom: 4px;
+            -webkit-overflow-scrolling: touch;
+            scrollbar-width: none;
+        }}
+        .filter-tags::-webkit-scrollbar {{ display: none; }}
+        .chip {{
+            background: var(--surface-bg);
+            border: 1px solid var(--border-color);
+            color: var(--text-secondary);
+            padding: 6px 12px;
+            border-radius: 8px;
+            font-size: 12.5px;
+            cursor: pointer;
+            white-space: nowrap;
+            flex-shrink: 0;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            min-height: 36px;
+        }}
+        .chip.active, .chip:hover {{
+            background: rgba(56, 189, 248, 0.14);
+            color: var(--accent-blue);
+            border-color: var(--accent-blue);
+        }}
+        .chip-count {{
+            font-size: 10.5px;
+            background: rgba(255, 255, 255, 0.1);
+            padding: 1px 5px;
+            border-radius: 8px;
+            font-family: 'JetBrains Mono', monospace;
+        }}
+        .notes-grid {{
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+            gap: 16px;
+        }}
+        .note-card {{
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 18px 16px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            transition: all 0.2s ease;
+            text-decoration: none;
+            color: inherit;
+            position: relative;
+            cursor: pointer;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+        }}
+        .note-card:hover {{
+            background: var(--card-hover);
+            transform: translateY(-2px);
+            border-color: var(--border-glow);
+        }}
+        .note-card.selected {{
+            border-color: var(--accent-purple);
+            background: rgba(192, 132, 252, 0.08);
+        }}
+        .card-checkbox {{
+            position: absolute;
+            top: 14px;
+            right: 14px;
+            width: 20px;
+            height: 20px;
+            border-radius: 4px;
+            accent-color: var(--accent-purple);
+            display: none;
+            cursor: pointer;
+            z-index: 2;
+        }}
+        body.split-mode-active .card-checkbox {{
+            display: block;
+        }}
+        .card-top {{
+            margin-bottom: 10px;
+        }}
+        .card-meta {{
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+            padding-right: 20px;
+            flex-wrap: wrap;
+            gap: 6px;
+        }}
+        .card-cat {{
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: var(--accent-blue);
+            background: rgba(56, 189, 248, 0.1);
+            padding: 3px 7px;
+            border-radius: 5px;
+            border: 1px solid rgba(56, 189, 248, 0.2);
+        }}
+        .card-date {{
+            font-size: 11.5px;
+            color: var(--text-muted);
+        }}
+        .card-title {{
+            font-size: 16px;
+            font-weight: 700;
+            color: #ffffff;
+            margin-bottom: 8px;
+            line-height: 1.35;
+            word-break: break-word;
+        }}
+        .card-landmarks {{
+            margin: 8px 0;
+            font-size: 11.5px;
+            color: var(--text-secondary);
+            background: rgba(11, 17, 32, 0.6);
+            padding: 6px 8px;
+            border-radius: 6px;
+            border-left: 2px solid var(--accent-green);
+            font-family: 'JetBrains Mono', monospace;
+            line-height: 1.4;
+            word-break: break-word;
+        }}
+        .card-snippet {{
+            font-size: 13px;
+            color: #94a3b8;
+            line-height: 1.55;
+            display: -webkit-box;
+            -webkit-line-clamp: 3;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+            word-break: break-word;
+        }}
+        .card-tags {{
+            display: flex;
+            gap: 5px;
+            flex-wrap: wrap;
+            margin-top: 12px;
+            padding-top: 10px;
+            border-top: 1px solid rgba(255, 255, 255, 0.05);
+        }}
+        .tag-pill {{
+            font-size: 11px;
+            color: var(--accent-purple);
+            background: rgba(192, 132, 252, 0.1);
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: 'JetBrains Mono', monospace;
+        }}
+        .empty-state {{
+            text-align: center;
+            padding: 50px 16px;
+            color: var(--text-muted);
+            grid-column: 1 / -1;
+        }}
+
+        .floating-action-bar {{
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%) translateY(140%);
+            background: #162032;
+            border: 1px solid var(--accent-purple);
+            border-radius: 12px;
+            padding: 10px 18px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.7);
+            z-index: 100;
+            width: calc(100% - 32px);
+            max-width: 480px;
+            justify-content: space-between;
+            transition: transform 0.3s ease;
+        }}
+        .floating-action-bar.visible {{
+            transform: translateX(-50%) translateY(0);
+        }}
+        .floating-text {{
+            font-size: 13px;
+            color: #fff;
+            font-weight: 700;
+        }}
+        .btn-launch-split {{
+            background: linear-gradient(135deg, var(--accent-purple), var(--accent-indigo));
+            color: #090d16;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 800;
+            cursor: pointer;
+        }}
+        .btn-clear-selection {{
+            background: transparent;
+            border: 1px solid var(--border-color);
+            color: var(--text-secondary);
+            padding: 6px 10px;
+            border-radius: 6px;
+            font-size: 12px;
+            cursor: pointer;
+        }}
+
+        .split-modal {{
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(9, 13, 22, 0.95);
+            backdrop-filter: blur(16px);
+            z-index: 9999;
+            flex-direction: column;
+        }}
+        .split-modal.active {{ display: flex; }}
+        .split-modal-header {{
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 16px;
+            background: #111827;
+            border-bottom: 1px solid var(--border-color);
+        }}
+        .split-modal-title {{
+            font-size: 14px;
+            font-weight: 700;
+            color: #fff;
+        }}
+        .split-modal-close {{
+            background: rgba(239, 68, 68, 0.15);
+            color: #f87171;
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            padding: 5px 12px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 700;
+            font-size: 12px;
+        }}
+        .split-grid-container {{
+            flex: 1;
+            display: grid;
+            gap: 10px;
+            padding: 10px;
+            height: calc(100vh - 54px);
+        }}
+        .split-grid-container.cols-2 {{ grid-template-columns: 1fr 1fr; }}
+        .split-grid-container.cols-3 {{ grid-template-columns: 1fr 1fr 1fr; }}
+        .split-grid-container.cols-4 {{ grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; }}
+        .split-pane {{
+            background: #162032;
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }}
+        .split-pane-header {{
+            background: #0d131f;
+            padding: 8px 12px;
+            border-bottom: 1px solid var(--border-color);
+            font-size: 12.5px;
+            font-weight: 700;
+            color: var(--accent-blue);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }}
+        .split-pane-header a {{
+            color: var(--accent-purple);
+            text-decoration: none;
+            font-size: 11.5px;
+        }}
+        .split-pane iframe {{
+            width: 100%;
+            height: 100%;
+            border: none;
+            flex: 1;
+            background: #090d16;
+        }}
+
+        /* Mobile specific layout fixes */
+        @media (max-width: 768px) {{
+            body {{ padding: 14px 10px 70px 10px; }}
+            header {{ flex-direction: column; align-items: stretch; gap: 10px; }}
+            .header-actions {{ width: 100%; justify-content: space-between; }}
+            .notes-grid {{ grid-template-columns: 1fr; gap: 12px; }}
+            .search-shortcut-hint {{ display: none; }}
+            .split-grid-container.cols-2,
+            .split-grid-container.cols-3,
+            .split-grid-container.cols-4 {{
+                grid-template-columns: 1fr;
+                grid-template-rows: 1fr 1fr;
+            }}
+        }}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div class="logo-area">
+                <h1>
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2.5"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+                    AGY Notes Hub
+                </h1>
+                <p>Kho Ghi Chú AI • Mốc Trích Xuất & Cloud Sync</p>
+            </div>
+            <div class="header-actions">
+                {cloud_badge_html}
+                <button class="split-mode-btn" id="toggleSplitBtn" onclick="toggleSplitMode()">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="8" height="18" rx="2"></rect><rect x="13" y="3" width="8" height="18" rx="2"></rect></svg>
+                    So Sánh
+                </button>
+                <div class="stats-badge" id="statsBadge">
+                    {len(meta_list)} Notes
+                </div>
+            </div>
+        </header>
+
+        <div class="controls-bar">
+            <div class="search-box">
+                <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                <input type="text" id="searchInput" class="search-input" placeholder="🔍 Tìm kiếm tiêu đề, category, mốc, tag..." autofocus>
+                <span class="search-shortcut-hint">/</span>
+            </div>
+            <div class="filter-tags" id="categoryChips">
+                <span class="chip active" data-cat="all">Tất cả <span class="chip-count">{len(meta_list)}</span></span>
+            </div>
+        </div>
+
+        <div class="notes-grid" id="notesGrid"></div>
+    </div>
+
+    <div class="floating-action-bar" id="floatingBar">
+        <span class="floating-text" id="selectedCountText">0 note</span>
+        <button class="btn-launch-split" onclick="launchSplitView()">
+            ⚡ Xem Cùng Lúc
+        </button>
+        <button class="btn-clear-selection" onclick="clearSelection()">Bỏ</button>
+    </div>
+
+    <div class="split-modal" id="splitModal">
+        <div class="split-modal-header">
+            <div class="split-modal-title" id="splitModalTitle">
+                ⚡ So sánh Notes
+            </div>
+            <button class="split-modal-close" onclick="closeSplitModal()">✕ Đóng</button>
+        </div>
+        <div class="split-grid-container" id="splitGridContainer"></div>
+    </div>
+
+    <script>
+        const rawNotes = {notes_json_str};
+        let activeCategory = 'all';
+        let splitModeActive = false;
+        let selectedNoteIds = new Set();
+
+        document.addEventListener('keydown', (e) => {{
+            if (e.key === '/' && document.activeElement !== document.getElementById('searchInput')) {{
+                e.preventDefault();
+                document.getElementById('searchInput').focus();
+            }}
+            if (e.key === 'Escape') {{
+                closeSplitModal();
+            }}
+        }});
+
+        function renderCategories() {{
+            const catCounts = {{}};
+            rawNotes.forEach(n => {{
+                const c = (n.category || 'General').toLowerCase();
+                catCounts[c] = (catCounts[c] || 0) + 1;
+            }});
+
+            const container = document.getElementById('categoryChips');
+            container.innerHTML = `<span class="chip active" data-cat="all">Tất cả <span class="chip-count">${{rawNotes.length}}</span></span>`;
+            
+            Object.keys(catCounts).sort().forEach(c => {{
+                const span = document.createElement('span');
+                span.className = 'chip';
+                span.dataset.cat = c;
+                span.innerHTML = `${{c}} <span class="chip-count">${{catCounts[c]}}</span>`;
+                span.onclick = () => filterCategory(c);
+                container.appendChild(span);
+            }});
+            container.children[0].onclick = () => filterCategory('all');
+        }}
+
+        function filterCategory(cat) {{
+            activeCategory = cat.toLowerCase();
+            document.querySelectorAll('#categoryChips .chip').forEach(c => {{
+                c.classList.toggle('active', c.dataset.cat.toLowerCase() === activeCategory);
+            }});
+            filterAndRenderNotes();
+        }}
+
+        function toggleSplitMode() {{
+            splitModeActive = !splitModeActive;
+            document.body.classList.toggle('split-mode-active', splitModeActive);
+            const btn = document.getElementById('toggleSplitBtn');
+            btn.classList.toggle('active', splitModeActive);
+            if (!splitModeActive) {{
+                clearSelection();
+            }}
+            filterAndRenderNotes();
+        }}
+
+        function toggleSelectNote(id, event) {{
+            if (event) event.stopPropagation();
+            if (selectedNoteIds.has(id)) {{
+                selectedNoteIds.delete(id);
+            }} else {{
+                if (selectedNoteIds.size >= 4) {{
+                    alert('Tối đa 4 note!');
+                    return;
+                }}
+                selectedNoteIds.add(id);
+            }}
+            updateFloatingBar();
+            filterAndRenderNotes();
+        }}
+
+        function updateFloatingBar() {{
+            const count = selectedNoteIds.size;
+            const bar = document.getElementById('floatingBar');
+            document.getElementById('selectedCountText').innerText = `${{count}} note đã chọn`;
+            if (count >= 2) {{
+                bar.classList.add('visible');
+            }} else {{
+                bar.classList.remove('visible');
+            }}
+        }}
+
+        function clearSelection() {{
+            selectedNoteIds.clear();
+            updateFloatingBar();
+            filterAndRenderNotes();
+        }}
+
+        function launchSplitView(customIds) {{
+            const ids = customIds || Array.from(selectedNoteIds);
+            if (ids.length < 2) {{
+                alert('Vui lòng chọn ít nhất 2 note!');
+                return;
+            }}
+
+            const container = document.getElementById('splitGridContainer');
+            container.innerHTML = '';
+            
+            container.className = 'split-grid-container';
+            if (ids.length === 2) container.classList.add('cols-2');
+            else if (ids.length === 3) container.classList.add('cols-3');
+            else if (ids.length >= 4) container.classList.add('cols-4');
+
+            ids.forEach(id => {{
+                const note = rawNotes.find(n => n.id === id || n.id.startsWith(id));
+                if (!note) return;
+
+                const pane = document.createElement('div');
+                pane.className = 'split-pane';
+                pane.innerHTML = `
+                    <div class="split-pane-header">
+                        <span>[${{note.category || 'Note'}}] ${{note.title}}</span>
+                        <a href="${{note.html_file}}" target="_blank">Tab riêng ↗</a>
+                    </div>
+                    <iframe src="${{note.html_file}}"></iframe>
+                `;
+                container.appendChild(pane);
+            }});
+
+            document.getElementById('splitModal').classList.add('active');
+        }}
+
+        function closeSplitModal() {{
+            document.getElementById('splitModal').classList.remove('active');
+        }}
+
+        function filterAndRenderNotes() {{
+            const query = document.getElementById('searchInput').value.toLowerCase().trim();
+            const grid = document.getElementById('notesGrid');
+            grid.innerHTML = '';
+
+            const filtered = rawNotes.filter(n => {{
+                const nCat = (n.category || 'General').toLowerCase();
+                const matchCat = activeCategory === 'all' || nCat === activeCategory;
+                
+                const matchQuery = !query ||
+                    (n.title && n.title.toLowerCase().includes(query)) ||
+                    (n.category && n.category.toLowerCase().includes(query)) ||
+                    (n.snippet_preview && n.snippet_preview.toLowerCase().includes(query)) ||
+                    (n.start_marker && n.start_marker.toLowerCase().includes(query)) ||
+                    (n.end_marker && n.end_marker.toLowerCase().includes(query)) ||
+                    (n.tags && n.tags.some(t => t.toLowerCase().includes(query)));
+                
+                return matchCat && matchQuery;
+            }});
+
+            document.getElementById('statsBadge').innerHTML = `${{filtered.length}} / ${{rawNotes.length}} Notes`;
+
+            if (filtered.length === 0) {{
+                grid.innerHTML = `
+                    <div class="empty-state">
+                        <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="1.5"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                        <p style="margin-top:10px">Không tìm thấy ghi chú nào.</p>
+                    </div>
+                `;
+                return;
+            }}
+
+            filtered.forEach(note => {{
+                let dateStr = note.created_at;
+                try {{
+                    const d = new Date(note.created_at);
+                    dateStr = d.toLocaleTimeString('vi-VN', {{hour: '2-digit', minute:'2-digit'}}) + ' ' + d.toLocaleDateString('vi-VN');
+                }} catch(e) {{}}
+
+                const tagsHtml = (note.tags || []).map(t => `<span class="tag-pill">#${{t}}</span>`).join('');
+                
+                let landmarkLine = '';
+                if (note.start_marker || note.end_marker) {{
+                    const s = note.start_marker ? `🟢 ${{note.start_marker.slice(0, 22)}}...` : '';
+                    const e = note.end_marker ? ` 🔴 ${{note.end_marker.slice(0, 22)}}` : '';
+                    landmarkLine = `<div class="card-landmarks">${{s}}${{e}}</div>`;
+                }}
+
+                const isSelected = selectedNoteIds.has(note.id);
+                const card = document.createElement('div');
+                card.className = `note-card ${{isSelected ? 'selected' : ''}}`;
+                card.onclick = (e) => {{
+                    if (splitModeActive) {{
+                        toggleSelectNote(note.id, e);
+                    }} else {{
+                        window.location.href = note.html_file;
+                    }}
+                }};
+
+                card.innerHTML = `
+                    <input type="checkbox" class="card-checkbox" ${{isSelected ? 'checked' : ''}} onclick="toggleSelectNote('${{note.id}}', event)">
+                    <div class="card-top">
+                        <div class="card-meta">
+                            <span class="card-cat">${{note.category || 'General'}}</span>
+                            <span class="card-date">${{dateStr}}</span>
+                        </div>
+                        <div class="card-title">${{note.title}}</div>
+                        ${{landmarkLine}}
+                        <div class="card-snippet">${{note.snippet_preview || ''}}</div>
+                    </div>
+                    <div class="card-tags">
+                        ${{tagsHtml || '<span class="tag-pill" style="opacity:0.4">#note</span>'}}
+                    </div>
+                `;
+                grid.appendChild(card);
+            }});
+        }}
+
+        function checkUrlParams() {{
+            const params = new URLSearchParams(window.location.search);
+            const compareStr = params.get('compare');
+            if (compareStr) {{
+                const ids = compareStr.split(',').filter(x => x.trim());
+                if (ids.length >= 2) {{
+                    setTimeout(() => {{
+                        launchSplitView(ids);
+                    }}, 300);
+                }}
+            }}
+        }}
+
+        document.getElementById('searchInput').addEventListener('input', filterAndRenderNotes);
+
+        renderCategories();
+        filterAndRenderNotes();
+        checkUrlParams();
+    </script>
+</body>
+</html>
+"""
+    try:
+        with open(HUB_FILE, "w", encoding="utf-8") as f:
+            f.write(hub_html)
+    except Exception as e:
+        print(f"{RED}Lỗi khi tạo Hub HTML: {e}{RESET}", file=sys.stderr)
+
+def deploy_to_cloud(silent=False):
+    """
+    Deploys notes directory to the configured cloud provider in the background.
+    """
+    cfg = load_deploy_config()
+    provider = cfg.get("provider")
+    if not provider:
+        return False, "Chưa thiết lập Cloud Provider."
+
+    try:
+        if provider == "cloudflare":
+            project = cfg.get("project_name", "agy-notes")
+            cmd = ["npx", "-y", "wrangler", "pages", "deploy", NOTES_DIR, "--project-name", project, "--commit-dirty=true"]
+            res = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+            if res.returncode == 0:
+                if not silent:
+                    print(f"{GREEN}✓ Đã tự động đồng bộ lên Cloudflare Pages!{RESET}")
+                return True, "Cloudflare Pages synced"
+            else:
+                return False, res.stderr
+
+        elif provider == "vercel":
+            cmd = ["npx", "-y", "vercel", "deploy", NOTES_DIR, "--prod", "--yes"]
+            res = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+            if res.returncode == 0:
+                if not silent:
+                    print(f"{GREEN}✓ Đã tự động đồng bộ lên Vercel!{RESET}")
+                return True, "Vercel synced"
+            else:
+                return False, res.stderr
+
+        elif provider == "github":
+            subprocess.run(["git", "-C", NOTES_DIR, "add", "."], check=True)
+            subprocess.run(["git", "-C", NOTES_DIR, "commit", "-m", "Auto sync notes [skip ci]"], check=True)
+            subprocess.run(["git", "-C", NOTES_DIR, "push", "origin", "main"], check=True)
+            if not silent:
+                print(f"{GREEN}✓ Đã tự động push lên GitHub Pages!{RESET}")
+            return True, "GitHub Pages synced"
+
+    except Exception as e:
+        return False, str(e)
+
+    return False, "Unknown provider"
+
+def async_auto_deploy():
+    """
+    Spawns a background thread to deploy without delaying any note saving operation.
+    """
+    cfg = load_deploy_config()
+    if cfg.get("auto_sync", True) and cfg.get("provider"):
+        t = threading.Thread(target=deploy_to_cloud, kwargs={"silent": True}, daemon=True)
+        t.start()
+
+def add_note(title, content, category="General", tags=None, start_marker=None, end_marker=None, conversation_id=None):
+    """
+    Core function to save a snippet note with landmarks, compile HTML, and update the hub.
+    Triggers automatic cloud background deploy!
+    """
+    ensure_dirs()
+    if tags is None:
+        tags = []
+    elif isinstance(tags, str):
+        tags = [t.strip() for t in tags.split(",") if t.strip()]
+
+    title = title.strip() or "Untitled Snippet"
+    category = category.strip() or "General"
+    
+    clean_lines = [l.strip() for l in content.split("\n") if l.strip() and not l.startswith("#") and not l.startswith("```")]
+    
+    if not start_marker and clean_lines:
+        start_marker = clean_lines[0][:60]
+    if not end_marker and clean_lines:
+        end_marker = clean_lines[-1][:60]
+
+    slug = re.sub(r'[^a-zA-Z0-9_-]', '', title.lower().replace(' ', '-'))[:30]
+    ts_str = datetime.now().strftime("%Y%m%d-%H%M%S")
+    note_id = f"{ts_str}-{slug}" if slug else ts_str
+    
+    html_filename = f"{note_id}.html"
+    html_filepath = os.path.join(HTML_DIR, html_filename)
+    relative_html = f"html/{html_filename}"
+
+    md_filepath = os.path.join(MD_DIR, f"{note_id}.md")
+    with open(md_filepath, "w", encoding="utf-8") as f:
+        f.write(content)
+
+    snippet_preview = " ".join(clean_lines)[:180] if clean_lines else content[:180]
+
+    note_data = {
+        "id": note_id,
+        "title": title,
+        "category": category,
+        "tags": tags,
+        "created_at": datetime.now().isoformat(),
+        "start_marker": start_marker or "",
+        "end_marker": end_marker or "",
+        "snippet_preview": snippet_preview,
+        "html_file": relative_html,
+        "content": content,
+        "conversation_id": conversation_id or ""
+    }
+
+    rendered_html = generate_single_note_html(note_data)
+    with open(html_filepath, "w", encoding="utf-8") as f:
+        f.write(rendered_html)
+
+    meta_list = load_metadata()
+    meta_list.insert(0, {
+        "id": note_id,
+        "title": title,
+        "category": category,
+        "tags": tags,
+        "created_at": note_data["created_at"],
+        "start_marker": note_data["start_marker"],
+        "end_marker": note_data["end_marker"],
+        "snippet_preview": snippet_preview,
+        "html_file": relative_html,
+        "content": content,
+        "conversation_id": note_data["conversation_id"]
+    })
+    save_metadata(meta_list)
+    generate_web_hub(meta_list)
+
+    # Trigger background auto deploy
+    async_auto_deploy()
+
+    return note_data, html_filepath
+
+def delete_note_by_id(note_id):
+    meta_list = load_metadata()
+    target = None
+    new_list = []
+    for item in meta_list:
+        if item["id"] == note_id or item["id"].startswith(note_id):
+            target = item
+        else:
+            new_list.append(item)
+    
+    if target:
+        html_file = os.path.join(NOTES_DIR, target["html_file"])
+        if os.path.exists(html_file):
+            try:
+                os.remove(html_file)
+            except Exception:
+                pass
+        md_file = os.path.join(MD_DIR, f"{target['id']}.md")
+        if os.path.exists(md_file):
+            try:
+                os.remove(md_file)
+            except Exception:
+                pass
+        save_metadata(new_list)
+        generate_web_hub(new_list)
+        async_auto_deploy()
+        return True, target["title"]
+    return False, None
+
+def open_in_browser(file_path):
+    abs_path = os.path.abspath(file_path)
+    if not os.path.exists(abs_path):
+        print(f"{RED}Không tìm thấy file: {abs_path}{RESET}")
+        return
+    
+    try:
+        if sys.platform == "darwin":
+            subprocess.run(["open", abs_path])
+        elif sys.platform.startswith("linux"):
+            subprocess.run(["xdg-open", abs_path], stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
+        else:
+            os.startfile(abs_path)
+        print(f"{GREEN}✓ Đã mở trên trình duyệt: {abs_path}{RESET}")
+    except Exception as e:
+        print(f"{RED}Không thể mở trình duyệt tự động: {e}{RESET}")
+        print(f"Vui lòng mở file bằng tay: {CYAN}file://{abs_path}{RESET}")
+
+def open_multiple_in_browser(targets):
+    meta_list = load_metadata()
+    resolved_ids = []
+    resolved_files = []
+
+    for t in targets:
+        target_item = None
+        if str(t).isdigit():
+            idx = int(t) - 1
+            if 0 <= idx < len(meta_list):
+                target_item = meta_list[idx]
+        else:
+            for n in meta_list:
+                if n["id"].startswith(t):
+                    target_item = n
+                    break
+        if target_item:
+            resolved_ids.append(target_item["id"])
+            resolved_files.append(os.path.join(NOTES_DIR, target_item["html_file"]))
+
+    if not resolved_ids:
+        print(f"{RED}Không tìm thấy các note được chỉ định: {targets}{RESET}")
+        return
+
+    if len(resolved_ids) >= 2:
+        compare_url = f"file://{HUB_FILE}?compare={','.join(resolved_ids)}"
+        print(f"\n{BOLD}{MAGENTA}⚡ Đang mở chế độ SO SÁNH / SPLIT VIEW {len(resolved_ids)} Notes cùng lúc...{RESET}")
+        try:
+            if sys.platform == "darwin":
+                subprocess.run(["open", compare_url])
+            elif sys.platform.startswith("linux"):
+                subprocess.run(["xdg-open", compare_url], stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
+            else:
+                os.startfile(compare_url)
+            print(f"{GREEN}✓ Đã mở giao diện Split-Screen trên trình duyệt!{RESET}")
+        except Exception:
+            for f in resolved_files:
+                open_in_browser(f)
+    else:
+        for f in resolved_files:
+            open_in_browser(f)
+
+def view_note_terminal(note_id):
+    meta_list = load_metadata()
+    target = None
+    if str(note_id).isdigit():
+        idx = int(note_id) - 1
+        if 0 <= idx < len(meta_list):
+            target = meta_list[idx]
+    if not target:
+        for n in meta_list:
+            if n["id"] == note_id or n["id"].startswith(note_id):
+                target = n
+                break
+    if not target:
+        print(f"{RED}Không tìm thấy note tương ứng: {note_id}{RESET}")
+        return
+
+    html_file = os.path.join(NOTES_DIR, target["html_file"])
+    print(f"\n{BOLD}{BLUE}========================================================================{RESET}")
+    print(f"{BOLD}Tiêu đề: {CYAN}{target['title']}{RESET}")
+    print(f"{BOLD}Category: {MAGENTA}{target.get('category', 'General')}{RESET} | Tags: {YELLOW}{', '.join(target.get('tags', []))}{RESET}")
+    print(f"{BOLD}Thời gian: {DIM}{target.get('created_at', '')}{RESET}")
+    if target.get("start_marker"):
+        print(f"{GREEN}🟢 Mốc đầu:{RESET} \"{target['start_marker']}\"")
+    if target.get("end_marker"):
+        print(f"{YELLOW}🔴 Mốc cuối:{RESET} \"{target['end_marker']}\"")
+    print(f"{BOLD}{BLUE}========================================================================{RESET}\n")
+    print(f"{target.get('content') or target.get('snippet_preview', '')}\n")
+    print(f"{DIM}File HTML đầy đủ: file://{html_file}{RESET}\n")
+
+def list_notes_terminal():
+    meta_list = load_metadata()
+    if not meta_list:
+        print(f"{YELLOW}Chưa có ghi chú nào trong kho lưu trữ.{RESET}")
+        return []
+    
+    cfg = load_deploy_config()
+    live_url = cfg.get("live_url")
+
+    print(f"\n{BOLD}{MAGENTA}📝 DANH SÁCH GHI CHÚ ĐÃ LƯU (AGY NOTES):{RESET}")
+    if live_url:
+        print(f"🌐 {GREEN}Live Cloud URL: {BOLD}{live_url}{RESET}")
+    print(f"{DIM}" + "─" * 88 + f"{RESET}")
+    print(f"{BOLD}{'STT':<4} {'Thời gian':<13} {'Category':<13} {'Tiêu đề & Mốc trích xuất'}{RESET}")
+    print(f"{DIM}" + "─" * 88 + f"{RESET}")
+
+    for idx, n in enumerate(meta_list, 1):
+        try:
+            dt = datetime.fromisoformat(n["created_at"]).strftime("%d/%m %H:%M")
+        except Exception:
+            dt = n.get("created_at", "")[:10]
+        cat_disp = format_category_terminal(n.get("category", ""))
+        title = n.get("title", "Untitled")
+        
+        landmark_disp = ""
+        if n.get("start_marker"):
+            short_marker = n["start_marker"][:22] + "..." if len(n["start_marker"]) > 22 else n["start_marker"]
+            landmark_disp = f" {DIM}(Mốc: {short_marker}){RESET}"
+            
+        print(f"{CYAN}{idx:<4}{RESET} {DIM}{dt:<13}{RESET} {cat_disp:<22} {BOLD}{title}{RESET}{landmark_disp}")
+
+    print(f"{DIM}" + "─" * 88 + f"{RESET}")
+    return meta_list
+
+def interactive_setup_cloud():
+    print(f"\n{BOLD}{CYAN}☁️ THIẾT LẬP TỰ ĐỘNG ĐỒNG BỘ CLOUD PUBLIC (MỞ XEM MỌI NƠI){RESET}")
+    print(f"Chọn nền tảng lưu trữ bạn muốn sử dụng:\n")
+    print(f"  1. {BOLD}Cloudflare Pages{RESET} (Khuyên dùng — Cực nhanh, link https://<project>.pages.dev)")
+    print(f"  2. {BOLD}Vercel{RESET} (Link https://<project>.vercel.app)")
+    print(f"  3. {BOLD}GitHub Pages{RESET} (Repo GitHub + GitHub Pages)")
+    print(f"  4. {BOLD}Nhập thủ công Link Live đã có sẵn{RESET}")
+    print(f"  q. Thoát\n")
+
+    choice = input(f"{BOLD}Lựa chọn [1/2/3/4]: {RESET}").strip()
+    if choice == "1":
+        project = input(f"{CYAN}Tên Project Cloudflare Pages (mặc định: agy-notes): {RESET}").strip() or "agy-notes"
+        live_url = f"https://{project}.pages.dev"
+        save_deploy_config({
+            "provider": "cloudflare",
+            "project_name": project,
+            "live_url": live_url,
+            "auto_sync": True
+        })
+        print(f"\n{GREEN}✓ Đã lưu cấu hình Cloudflare Pages!{RESET}")
+        print(f"👉 Link của bạn: {BOLD}{live_url}{RESET}")
+        generate_web_hub(load_metadata())
+
+    elif choice == "2":
+        project = input(f"{CYAN}Tên Project Vercel (mặc định: agy-notes): {RESET}").strip() or "agy-notes"
+        live_url = f"https://{project}.vercel.app"
+        save_deploy_config({
+            "provider": "vercel",
+            "project_name": project,
+            "live_url": live_url,
+            "auto_sync": True
+        })
+        print(f"\n{GREEN}✓ Đã lưu cấu hình Vercel!{RESET}")
+        print(f"👉 Link của bạn: {BOLD}{live_url}{RESET}")
+        generate_web_hub(load_metadata())
+
+    elif choice == "3":
+        repo_url = input(f"{CYAN}Git Remote Repo URL (VD: git@github.com:username/my-notes.git): {RESET}").strip()
+        live_url = input(f"{CYAN}GitHub Pages URL (VD: https://username.github.io/my-notes/): {RESET}").strip()
+        save_deploy_config({
+            "provider": "github",
+            "repo_url": repo_url,
+            "live_url": live_url,
+            "auto_sync": True
+        })
+        print(f"\n{GREEN}✓ Đã lưu cấu hình GitHub Pages!{RESET}")
+        generate_web_hub(load_metadata())
+
+    elif choice == "4":
+        live_url = input(f"{CYAN}Nhập URL Live Web của bạn: {RESET}").strip()
+        save_deploy_config({
+            "provider": "custom",
+            "live_url": live_url,
+            "auto_sync": False
+        })
+        print(f"\n{GREEN}✓ Đã lưu Link Live!{RESET}")
+        generate_web_hub(load_metadata())
+
+def interactive_menu():
+    while True:
+        meta_list = list_notes_terminal()
+        if not meta_list:
+            print(f"\n{YELLOW}💡 Để tạo ghi chú mới, chạy: {BOLD}agy-note add{RESET}\n")
+            break
+
+        print(f"{BOLD}Thao tác:{RESET}")
+        print(f"  • Nhập {CYAN}<STT>{RESET}                   : Mở Note đơn trên Web Browser (VD: {CYAN}1{RESET})")
+        print(f"  • Nhập {MAGENTA}c <STT1> <STT2> ...{RESET}       : Xem {MAGENTA}CÙNG LÚC 2-4 Notes{RESET} ở chế độ Split Screen (VD: {MAGENTA}c 1 2{RESET})")
+        print(f"  • Nhập {MAGENTA}w{RESET} hoặc {MAGENTA}0{RESET}               : Mở Trang Web Hub Dashboard (index.html)")
+        print(f"  • Nhập {GREEN}v <STT>{RESET}                 : Xem nội dung & mốc trích xuất trên Terminal")
+        print(f"  • Nhập {YELLOW}s <từ_khóa>{RESET}            : Tìm kiếm note theo mốc/từ khóa")
+        print(f"  • Nhập {BLUE}cloud{RESET}                   : Thiết lập kết nối Cloud Public")
+        print(f"  • Nhập {RED}d <STT>{RESET}                 : Xóa note")
+        print(f"  • Nhập {CYAN}q{RESET}                       : Thoát\n")
+
+        raw_choice = input(f"{BOLD}Chọn thao tác: {RESET}").strip()
+        if not raw_choice or raw_choice.lower() in ["q", "exit", "quit"]:
+            break
+
+        if raw_choice in ["0", "w", "web", "hub"]:
+            open_in_browser(HUB_FILE)
+            continue
+
+        if raw_choice.lower() in ["cloud", "deploy", "sync"]:
+            interactive_setup_cloud()
+            continue
+
+        parts = raw_choice.split()
+        
+        if (parts[0].lower() in ["c", "compare", "split"] and len(parts) >= 3) or (len(parts) >= 2 and all(p.isdigit() for p in parts)):
+            target_indices = [p for p in parts if p.isdigit()]
+            if len(target_indices) >= 2:
+                open_multiple_in_browser(target_indices[:4])
+                continue
+
+        if parts[0].lower() == "v" and len(parts) >= 2:
+            view_note_terminal(parts[1])
+            continue
+
+        if parts[0].lower() == "d" and len(parts) >= 2:
+            target_id = parts[1]
+            if parts[1].isdigit():
+                idx = int(parts[1]) - 1
+                if 0 <= idx < len(meta_list):
+                    target_id = meta_list[idx]["id"]
+            ok, title = delete_note_by_id(target_id)
+            if ok:
+                print(f"{GREEN}✓ Đã xóa ghi chú '{title}' thành công!{RESET}")
+            else:
+                print(f"{RED}Không tìm thấy note để xóa.{RESET}")
+            continue
+
+        if parts[0].lower() == "s" and len(parts) >= 2:
+            query = " ".join(parts[1:]).lower()
+            print(f"\n{BOLD}Kết quả tìm kiếm cho: \"{query}\"{RESET}")
+            found = False
+            for idx, n in enumerate(meta_list, 1):
+                if (query in n["title"].lower() or 
+                    query in n.get("category", "").lower() or
+                    query in n.get("start_marker", "").lower() or
+                    query in n.get("end_marker", "").lower() or
+                    query in n.get("snippet_preview", "").lower() or 
+                    any(query in t.lower() for t in n.get("tags", []))):
+                    print(f"  [{idx}] {n['title']} [{n.get('category', 'General')}] (Mốc: {n.get('start_marker','')[:25]}...)")
+                    found = True
+            if not found:
+                print(f"  {YELLOW}Không tìm thấy ghi chú nào phù hợp.{RESET}")
+            continue
+
+        if raw_choice.isdigit():
+            idx = int(raw_choice) - 1
+            if 0 <= idx < len(meta_list):
+                target_file = os.path.join(NOTES_DIR, meta_list[idx]["html_file"])
+                open_in_browser(target_file)
+                continue
+
+        print(f"{YELLOW}Lựa chọn không hợp lệ!{RESET}")
+
+def main():
+    parser = argparse.ArgumentParser(description="AGY Note: AI Snippet Note Saver, Multi-Note HTML Viewer & Cloud Sync")
+    parser.add_argument("--add", "-a", action="store_true", help="Thêm ghi chú mới")
+    parser.add_argument("--title", "-t", type=str, help="Tiêu đề ghi chú")
+    parser.add_argument("--category", "-c", type=str, default="General", help="Category phân loại ghi chú")
+    parser.add_argument("--tags", type=str, default="", help="Tags cách nhau bởi dấu phẩy")
+    parser.add_argument("--start-marker", "-sm", type=str, default="", help="Mốc điểm đầu của đoạn trích")
+    parser.add_argument("--end-marker", "-em", type=str, default="", help="Mốc điểm cuối của đoạn trích")
+    parser.add_argument("--content", type=str, help="Nội dung ghi chú dạng Markdown/Text")
+    parser.add_argument("--conversation-id", type=str, default="", help="Mã phiên hội thoại AGY")
+    parser.add_argument("--list", "-l", action="store_true", help="Xem danh sách ghi chú")
+    parser.add_argument("--open", "-o", nargs="+", help="Mở 1 hoặc nhiều note cùng lúc theo STT/ID (VD: -o 1 2 3)")
+    parser.add_argument("--compare", "--split", "-cmp", dest="compare", nargs="+", help="Xem cùng lúc 2-4 note ở chế độ Split Screen")
+    parser.add_argument("--web", "-w", action="store_true", help="Mở trang Web Hub dashboard")
+    parser.add_argument("--view", "-v", type=str, help="Xem nội dung note trên terminal")
+    parser.add_argument("--search", "-s", type=str, help="Tìm kiếm ghi chú")
+    parser.add_argument("--delete", "-d", type=str, help="Xóa ghi chú theo STT hoặc ID")
+    parser.add_argument("--rebuild", action="store_true", help="Tạo lại toàn bộ HTML từ metadata và markdown files")
+    parser.add_argument("--setup-cloud", action="store_true", help="Thiết lập kết nối Cloudflare / Vercel / GitHub Pages")
+    parser.add_argument("--deploy", action="store_true", help="Kích hoạt đồng bộ Cloud ngay lập tức")
+
+    args = parser.parse_args()
+
+    if args.setup_cloud:
+        interactive_setup_cloud()
+        return
+
+    if args.deploy:
+        ok, msg = deploy_to_cloud(silent=False)
+        if ok:
+            print(f"{GREEN}✓ Đồng bộ thành công: {msg}{RESET}")
+        else:
+            print(f"{RED}Không thể đồng bộ: {msg}{RESET}")
+        return
+
+    if args.rebuild:
+        meta_list = load_metadata()
+        for item in meta_list:
+            html_path = os.path.join(NOTES_DIR, item["html_file"])
+            rendered = generate_single_note_html(item)
+            with open(html_path, "w", encoding="utf-8") as f:
+                f.write(rendered)
+        generate_web_hub(meta_list)
+        print(f"{GREEN}✓ Đã tạo lại toàn bộ {len(meta_list)} HTML Notes và Web Hub Dashboard thành công!{RESET}")
+        return
+
+    if args.add or args.title or args.content:
+        content = args.content
+        if not content:
+            if not sys.stdin.isatty():
+                content = sys.stdin.read().strip()
+            else:
+                print(f"{RED}Nội dung không được để trống!{RESET}")
+                return
+
+        title = args.title or "Untitled Snippet"
+        note_data, path = add_note(
+            title=title,
+            content=content,
+            category=args.category,
+            tags=args.tags,
+            start_marker=args.start_marker,
+            end_marker=args.end_marker,
+            conversation_id=args.conversation_id
+        )
+        print(f"{GREEN}✓ Đã lưu note: '{note_data['title']}' [{note_data['category']}]{RESET}")
+        if note_data.get('start_marker'):
+            print(f"{DIM}  🟢 Mốc đầu: \"{note_data['start_marker']}\"{RESET}")
+        if note_data.get('end_marker'):
+            print(f"{DIM}  🔴 Mốc cuối: \"{note_data['end_marker']}\"{RESET}")
+        print(f"{CYAN}File: {path}{RESET}")
+        return
+
+    if args.web:
+        open_in_browser(HUB_FILE)
+        return
+
+    if args.list:
+        list_notes_terminal()
+        return
+
+    if args.compare:
+        target_list = args.compare
+        open_multiple_in_browser(target_list)
+        return
+
+    if args.open:
+        if len(args.open) == 1 and "," in args.open[0]:
+            target_list = [x.strip() for x in args.open[0].split(",") if x.strip()]
+        else:
+            target_list = args.open
+        open_multiple_in_browser(target_list)
+        return
+
+    if args.view:
+        view_note_terminal(args.view)
+        return
+
+    if args.search:
+        meta_list = load_metadata()
+        q = args.search.lower()
+        print(f"\n{BOLD}Kết quả tìm kiếm cho: \"{q}\"{RESET}")
+        for idx, n in enumerate(meta_list, 1):
+            if (q in n["title"].lower() or 
+                q in n.get("category", "").lower() or
+                q in n.get("start_marker", "").lower() or
+                q in n.get("end_marker", "").lower() or
+                q in n.get("snippet_preview", "").lower() or 
+                any(q in t.lower() for t in n.get("tags", []))):
+                print(f"  [{idx}] {n['title']} [{n.get('category', 'General')}] -> {n['html_file']}")
+        return
+
+    if args.delete:
+        meta_list = load_metadata()
+        target_id = args.delete
+        if args.delete.isdigit():
+            idx = int(args.delete) - 1
+            if 0 <= idx < len(meta_list):
+                target_id = meta_list[idx]["id"]
+        ok, title = delete_note_by_id(target_id)
+        if ok:
+            print(f"{GREEN}✓ Đã xóa ghi chú '{title}'!{RESET}")
+        else:
+            print(f"{RED}Không tìm thấy note để xóa: {args.delete}{RESET}")
+        return
+
+    interactive_menu()
+
+if __name__ == "__main__":
+    try:
+        main()
+    except KeyboardInterrupt:
+        print("\nĐã hủy.")
