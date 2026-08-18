@@ -1,15 +1,16 @@
 #!/usr/bin/env python3
 """
 agy-note: Antigravity CLI Snippet Note Manager, Multi-Note HTML Viewer & Cloud Sync
-Upgraded with UI/UX Pro Max:
+Upgraded with Taste-Design Architecture:
+- Dual-Theme System (Curated Charcoal Dark & Warm Zinc Light) with 1-click Toggle
+- Plus Jakarta Sans + JetBrains Mono Typography Pairing (Anti-AI generic styling)
+- Middle Gray Surface Balance & Tactile Subtle Contrast
 - Mobile-First & Desktop Adaptive Responsive Architecture
 - Touch-Friendly 44px Target Zones & Horizontal Scroll Chip Bars
 - Interactive Expandable Accordions (<details>/<summary>) for deep-dive branches (Kiểu A)
 - Structured Section Cards with Headers & Tags
 - Key-Value Item Badges for lists (e.g. 1.1 Purpose: ...)
 - Sticky Section Navigator (Table of Contents)
-- Markdown Table & Callout Card rendering
-- Dark OLED / Obsidian Theme with Inter & JetBrains Mono typography
 - Split View (2, 3, 4 notes simultaneously)
 - Cloud Sync (Cloudflare Pages, Vercel, Surge, GitHub Pages)
 - Permanent raw Markdown backup in notes/md/
@@ -118,7 +119,7 @@ def format_inline_markdown(text):
 
 def parse_rich_markdown(md_text):
     """
-    Transforms raw markdown into a visually rich, mobile-optimized card layout.
+    Transforms raw markdown into a visually rich, card-based editorial layout.
     Supports Kiểu A: Expandable Accordion Deep-Dive Branches (<details><summary>...</summary>...</details>).
     """
     if not md_text:
@@ -323,7 +324,7 @@ def parse_rich_markdown(md_text):
             html_parts.append(f'''
             <div class="pro-callout callout-{callout_type}">
                 <div class="callout-icon">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
                 </div>
                 <div class="callout-text">{format_inline_markdown(clean_quote)}</div>
             </div>
@@ -363,7 +364,7 @@ def parse_rich_markdown(md_text):
 
 def generate_single_note_html(note_data):
     """
-    Renders standalone HTML with UI/UX Pro Max mobile-optimized responsive design.
+    Renders standalone HTML with curated Charcoal Dark and Warm Zinc Light themes.
     """
     raw_content = note_data.get("content", "")
     
@@ -384,7 +385,6 @@ def generate_single_note_html(note_data):
     created_at = note_data.get("created_at", "")
     start_marker = html.escape(note_data.get("start_marker", "") or "")
     end_marker = html.escape(note_data.get("end_marker", "") or "")
-    conv_id = html.escape(note_data.get("conversation_id", "") or "")
 
     try:
         dt_obj = datetime.fromisoformat(created_at)
@@ -399,7 +399,7 @@ def generate_single_note_html(note_data):
         <div class="toc-nav-bar">
             <div class="toc-header">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>
-                Mục Lục Nhanh ({len(toc)})
+                Mục Lục ({len(toc)})
             </div>
             <div class="toc-chips-scroll">
                 {toc_items}
@@ -411,60 +411,85 @@ def generate_single_note_html(note_data):
     <div class="landmark-box">
         <div class="landmark-title">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
-            Mốc Trích Xuất & Bối Cảnh
+            Mốc Trích Xuất
         </div>
         <div class="landmark-grid">
             <div class="landmark-item">
-                <span class="landmark-label">🏷️ Category:</span>
+                <span class="landmark-label">Category:</span>
                 <span class="cat-badge">{cat}</span>
             </div>
             <div class="landmark-item">
-                <span class="landmark-label">⏱️ Thời gian:</span>
+                <span class="landmark-label">Thời gian:</span>
                 <span class="landmark-val">{formatted_date}</span>
             </div>
-            {"<div class='landmark-item full-row'><span class='landmark-label'>🟢 Mốc đầu:</span><span class='landmark-marker start'>&ldquo;" + start_marker + "&rdquo;</span></div>" if start_marker else ""}
-            {"<div class='landmark-item full-row'><span class='landmark-label'>🔴 Mốc cuối:</span><span class='landmark-marker end'>&ldquo;" + end_marker + "&rdquo;</span></div>" if end_marker else ""}
+            {"<div class='landmark-item full-row'><span class='landmark-label'>Mốc đầu:</span><span class='landmark-marker start'>&ldquo;" + start_marker + "&rdquo;</span></div>" if start_marker else ""}
+            {"<div class='landmark-item full-row'><span class='landmark-label'>Mốc cuối:</span><span class='landmark-marker end'>&ldquo;" + end_marker + "&rdquo;</span></div>" if end_marker else ""}
         </div>
     </div>
     """
 
     return f"""<!DOCTYPE html>
-<html lang="vi">
+<html lang="vi" data-theme="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
     <title>{title} | AGY Note</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
     <style>
         :root {{
-            --bg-color: #090d16;
-            --surface-bg: #111827;
-            --card-bg: #151f32;
-            --card-inner: #1a263d;
-            --card-hover: #1e2c45;
-            --code-bg: #0b1120;
-            --text-primary: #f8fafc;
+            /* Dark Theme: Balanced Charcoal with Mid-Gray surfaces (Not pure black) */
+            --bg-color: #0f1117;
+            --surface-bg: #181c26;
+            --card-bg: #1e2330;
+            --card-inner: #262c3c;
+            --card-hover: #232938;
+            --code-bg: #0c0e14;
+            --text-primary: #f1f5f9;
             --text-secondary: #94a3b8;
             --text-muted: #64748b;
-            --accent-blue: #38bdf8;
-            --accent-indigo: #818cf8;
-            --accent-purple: #c084fc;
-            --accent-green: #34d399;
-            --accent-orange: #fb923c;
-            --border-color: rgba(148, 163, 184, 0.14);
-            --border-glow: rgba(56, 189, 248, 0.25);
+            --accent-color: #38bdf8;
+            --accent-subtle: rgba(56, 189, 248, 0.12);
+            --tag-color: #c084fc;
+            --tag-subtle: rgba(192, 132, 252, 0.12);
+            --border-color: rgba(255, 255, 255, 0.08);
+            --border-focus: rgba(56, 189, 248, 0.35);
+            --shadow-subtle: 0 4px 20px rgba(0, 0, 0, 0.4);
+            --kv-border: rgba(255, 255, 255, 0.06);
         }}
+
+        [data-theme="light"] {{
+            /* Light Theme: Balanced Warm Zinc / Crisp Slate (Not blinding pure white) */
+            --bg-color: #f4f4f6;
+            --surface-bg: #ffffff;
+            --card-bg: #ffffff;
+            --card-inner: #f1f2f5;
+            --card-hover: #eaebee;
+            --code-bg: #181c24;
+            --text-primary: #18181b;
+            --text-secondary: #52525b;
+            --text-muted: #71717a;
+            --accent-color: #0284c7;
+            --accent-subtle: rgba(2, 132, 199, 0.1);
+            --tag-color: #7c3aed;
+            --tag-subtle: rgba(124, 58, 237, 0.09);
+            --border-color: rgba(0, 0, 0, 0.09);
+            --border-focus: rgba(2, 132, 199, 0.3);
+            --shadow-subtle: 0 4px 16px rgba(0, 0, 0, 0.06);
+            --kv-border: rgba(0, 0, 0, 0.06);
+        }}
+
         * {{ box-sizing: border-box; margin: 0; padding: 0; }}
         html {{ scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }}
         body {{
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
             background-color: var(--bg-color);
             color: var(--text-primary);
             line-height: 1.68;
             padding: 24px 16px;
             min-height: 100vh;
+            transition: background-color 0.25s ease, color 0.25s ease;
         }}
         .container {{
             max-width: 900px;
@@ -473,7 +498,8 @@ def generate_single_note_html(note_data):
             border: 1px solid var(--border-color);
             border-radius: 16px;
             padding: 28px 24px;
-            box-shadow: 0 20px 40px -10px rgba(0, 0, 0, 0.5);
+            box-shadow: var(--shadow-subtle);
+            transition: all 0.25s ease;
         }}
         .header {{
             border-bottom: 1px solid var(--border-color);
@@ -488,15 +514,15 @@ def generate_single_note_html(note_data):
             margin-bottom: 12px;
         }}
         .cat-badge {{
-            background: rgba(56, 189, 248, 0.12);
-            color: var(--accent-blue);
+            background: var(--accent-subtle);
+            color: var(--accent-color);
             font-size: 11.5px;
             font-weight: 700;
             text-transform: uppercase;
             letter-spacing: 0.5px;
-            padding: 4px 9px;
+            padding: 3px 9px;
             border-radius: 6px;
-            border: 1px solid rgba(56, 189, 248, 0.25);
+            border: 1px solid var(--border-focus);
         }}
         .date-info {{
             font-size: 12.5px;
@@ -512,16 +538,17 @@ def generate_single_note_html(note_data):
         }}
         .tag-badge {{
             font-size: 11px;
-            color: var(--accent-purple);
-            background: rgba(192, 132, 252, 0.1);
+            color: var(--tag-color);
+            background: var(--tag-subtle);
             padding: 2px 7px;
             border-radius: 5px;
             font-family: 'JetBrains Mono', monospace;
+            font-weight: 500;
         }}
         h1.note-title {{
-            font-size: clamp(20px, 4.5vw, 27px);
+            font-size: clamp(20px, 4.5vw, 26px);
             font-weight: 800;
-            color: #ffffff;
+            color: var(--text-primary);
             line-height: 1.35;
             letter-spacing: -0.02em;
             word-break: break-word;
@@ -534,8 +561,13 @@ def generate_single_note_html(note_data):
             margin-bottom: 18px;
             flex-wrap: wrap;
         }}
+        .nav-left-group {{
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }}
         .back-link {{
-            color: var(--accent-blue);
+            color: var(--accent-color);
             text-decoration: none;
             font-size: 13px;
             display: inline-flex;
@@ -544,15 +576,34 @@ def generate_single_note_html(note_data):
             font-weight: 600;
             padding: 8px 14px;
             border-radius: 8px;
-            background: rgba(56, 189, 248, 0.08);
+            background: var(--accent-subtle);
             min-height: 38px;
             transition: all 0.2s ease;
         }}
         .back-link:hover {{
-            background: rgba(56, 189, 248, 0.18);
+            background: var(--border-focus);
+        }}
+        .theme-toggle-btn {{
+            background: var(--surface-bg);
+            border: 1px solid var(--border-color);
+            color: var(--text-secondary);
+            font-size: 12.5px;
+            font-weight: 600;
+            padding: 8px 12px;
+            border-radius: 8px;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            min-height: 38px;
+            transition: all 0.2s ease;
+        }}
+        .theme-toggle-btn:hover {{
+            color: var(--text-primary);
+            border-color: var(--border-focus);
         }}
         .copy-all-btn {{
-            background: rgba(255, 255, 255, 0.05);
+            background: var(--surface-bg);
             border: 1px solid var(--border-color);
             color: var(--text-secondary);
             font-size: 12.5px;
@@ -567,12 +618,12 @@ def generate_single_note_html(note_data):
             transition: all 0.2s ease;
         }}
         .copy-all-btn:hover {{
-            background: rgba(255, 255, 255, 0.12);
-            color: #fff;
+            color: var(--text-primary);
+            border-color: var(--border-focus);
         }}
 
         .toc-nav-bar {{
-            background: rgba(11, 17, 32, 0.7);
+            background: var(--surface-bg);
             border: 1px solid var(--border-color);
             border-radius: 12px;
             padding: 10px 14px;
@@ -599,9 +650,9 @@ def generate_single_note_html(note_data):
         }}
         .toc-chips-scroll::-webkit-scrollbar {{ display: none; }}
         .toc-chip {{
-            background: var(--surface-bg);
+            background: var(--card-inner);
             border: 1px solid var(--border-color);
-            color: var(--accent-blue);
+            color: var(--accent-color);
             text-decoration: none;
             padding: 6px 12px;
             border-radius: 8px;
@@ -616,11 +667,11 @@ def generate_single_note_html(note_data):
             transition: all 0.2s ease;
         }}
         .toc-chip:hover {{
-            background: rgba(56, 189, 248, 0.15);
-            border-color: var(--accent-blue);
+            background: var(--accent-subtle);
+            border-color: var(--accent-color);
         }}
         .toc-num {{
-            background: rgba(56, 189, 248, 0.2);
+            background: var(--accent-subtle);
             padding: 1px 5px;
             border-radius: 4px;
             font-size: 10.5px;
@@ -628,8 +679,8 @@ def generate_single_note_html(note_data):
         }}
         
         .landmark-box {{
-            background: rgba(11, 17, 32, 0.7);
-            border: 1px solid var(--border-glow);
+            background: var(--surface-bg);
+            border: 1px solid var(--border-color);
             border-radius: 12px;
             padding: 14px 16px;
             margin-bottom: 20px;
@@ -639,7 +690,7 @@ def generate_single_note_html(note_data):
             font-weight: 800;
             text-transform: uppercase;
             letter-spacing: 0.7px;
-            color: var(--accent-blue);
+            color: var(--accent-color);
             display: flex;
             align-items: center;
             gap: 6px;
@@ -666,7 +717,7 @@ def generate_single_note_html(note_data):
             font-weight: 600;
             white-space: nowrap;
         }}
-        .landmark-val {{ color: #e2e8f0; }}
+        .landmark-val {{ color: var(--text-primary); }}
         .landmark-marker {{
             padding: 3px 8px;
             border-radius: 6px;
@@ -676,27 +727,27 @@ def generate_single_note_html(note_data):
             word-break: break-word;
         }}
         .landmark-marker.start {{
-            background: rgba(52, 211, 153, 0.12);
-            color: var(--accent-green);
-            border: 1px solid rgba(52, 211, 153, 0.25);
+            background: rgba(16, 185, 129, 0.1);
+            color: #10b981;
+            border: 1px solid rgba(16, 185, 129, 0.25);
         }}
         .landmark-marker.end {{
-            background: rgba(251, 146, 60, 0.12);
-            color: var(--accent-orange);
-            border: 1px solid rgba(251, 146, 60, 0.25);
+            background: rgba(245, 158, 11, 0.1);
+            color: #f59e0b;
+            border: 1px solid rgba(245, 158, 11, 0.25);
         }}
 
-        .content {{ font-size: 15px; color: #cbd5e1; }}
+        .content {{ font-size: 14.5px; color: var(--text-primary); }}
         .pro-section-card {{
             background: var(--surface-bg);
             border: 1px solid var(--border-color);
             border-radius: 12px;
             margin-bottom: 18px;
             overflow: hidden;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
         }}
         .section-card-header {{
-            background: rgba(255, 255, 255, 0.025);
+            background: var(--card-inner);
             border-bottom: 1px solid var(--border-color);
             padding: 12px 16px;
             display: flex;
@@ -709,8 +760,8 @@ def generate_single_note_html(note_data):
             gap: 8px;
         }}
         .sec-num-badge {{
-            background: rgba(56, 189, 248, 0.15);
-            color: var(--accent-blue);
+            background: var(--accent-subtle);
+            color: var(--accent-color);
             font-size: 11px;
             font-weight: 800;
             padding: 2px 7px;
@@ -720,7 +771,7 @@ def generate_single_note_html(note_data):
         .sec-heading {{
             font-size: 15.5px;
             font-weight: 700;
-            color: #ffffff;
+            color: var(--text-primary);
             margin: 0;
             line-height: 1.35;
         }}
@@ -731,7 +782,7 @@ def generate_single_note_html(note_data):
             font-size: 14px;
             padding: 4px 6px;
         }}
-        .sec-anchor-link:hover {{ color: var(--accent-blue); }}
+        .sec-anchor-link:hover {{ color: var(--accent-color); }}
         .section-card-body {{
             padding: 16px 14px;
             display: flex;
@@ -741,59 +792,57 @@ def generate_single_note_html(note_data):
 
         .kv-item-card {{
             background: var(--card-inner);
-            border: 1px solid rgba(255, 255, 255, 0.06);
+            border: 1px solid var(--kv-border);
             border-radius: 9px;
             padding: 10px 14px;
             transition: all 0.2s ease;
         }}
         .kv-item-card:hover {{
-            background: #202e48;
-            border-color: rgba(56, 189, 248, 0.2);
+            background: var(--card-hover);
         }}
         .kv-item-card.sub-item {{
             margin-left: 8px;
-            border-left: 3px solid var(--accent-purple);
-            background: rgba(192, 132, 252, 0.04);
+            border-left: 3px solid var(--tag-color);
+            background: var(--tag-subtle);
         }}
         .kv-header {{
             margin-bottom: 4px;
         }}
         .kv-badge {{
             display: inline-block;
-            background: rgba(56, 189, 248, 0.12);
-            color: var(--accent-blue);
+            background: var(--accent-subtle);
+            color: var(--accent-color);
             font-weight: 700;
             font-size: 12px;
             padding: 2px 7px;
             border-radius: 5px;
             font-family: 'JetBrains Mono', monospace;
-            border: 1px solid rgba(56, 189, 248, 0.2);
+            border: 1px solid var(--border-focus);
         }}
         .kv-item-card.sub-item .kv-badge {{
-            background: rgba(192, 132, 252, 0.15);
-            color: var(--accent-purple);
-            border-color: rgba(192, 132, 252, 0.3);
+            background: var(--tag-subtle);
+            color: var(--tag-color);
+            border-color: var(--tag-color);
         }}
         .kv-body {{
             font-size: 13.5px;
-            color: #d1d5db;
+            color: var(--text-secondary);
             line-height: 1.6;
             word-break: break-word;
         }}
 
         /* Kiểu A: Expandable Accordion Deep-Dive Branch Styles */
         details.pro-branch {{
-            background: rgba(56, 189, 248, 0.04);
-            border: 1px dashed rgba(56, 189, 248, 0.3);
+            background: var(--accent-subtle);
+            border: 1px dashed var(--border-focus);
             border-radius: 8px;
             margin: 8px 0 4px 0;
             overflow: hidden;
             transition: all 0.25s ease;
         }}
         details.pro-branch[open] {{
-            background: rgba(15, 23, 42, 0.75);
-            border: 1px solid var(--accent-blue);
-            box-shadow: 0 4px 14px rgba(56, 189, 248, 0.12);
+            background: var(--surface-bg);
+            border: 1px solid var(--accent-color);
         }}
         summary.branch-toggle {{
             cursor: pointer;
@@ -801,7 +850,7 @@ def generate_single_note_html(note_data):
             display: flex;
             align-items: center;
             gap: 8px;
-            color: var(--accent-blue);
+            color: var(--accent-color);
             font-size: 12.5px;
             font-weight: 600;
             list-style: none;
@@ -810,11 +859,11 @@ def generate_single_note_html(note_data):
         }}
         summary.branch-toggle::-webkit-details-marker {{ display: none; }}
         summary.branch-toggle:hover {{
-            background: rgba(56, 189, 248, 0.1);
+            background: var(--accent-subtle);
         }}
         .chevron-icon {{
             transition: transform 0.25s ease;
-            color: var(--accent-blue);
+            color: var(--accent-color);
             flex-shrink: 0;
         }}
         details[open] .chevron-icon {{
@@ -822,9 +871,9 @@ def generate_single_note_html(note_data):
         }}
         .branch-content {{
             padding: 12px 14px;
-            border-top: 1px solid rgba(56, 189, 248, 0.18);
+            border-top: 1px solid var(--border-color);
             font-size: 13.5px;
-            color: #cbd5e1;
+            color: var(--text-secondary);
             line-height: 1.65;
             animation: expandFade 0.25s ease;
         }}
@@ -839,24 +888,24 @@ def generate_single_note_html(note_data):
             gap: 8px;
             padding: 4px 0;
             font-size: 14px;
-            color: #cbd5e1;
+            color: var(--text-primary);
             word-break: break-word;
         }}
         .plain-bullet-item.sub-item {{
             margin-left: 12px;
             font-size: 13px;
-            color: #94a3b8;
+            color: var(--text-secondary);
         }}
         .bullet-dot {{
             width: 5px;
             height: 5px;
             border-radius: 50%;
-            background: var(--accent-blue);
+            background: var(--accent-color);
             margin-top: 8px;
             flex-shrink: 0;
         }}
         .plain-bullet-item.sub-item .bullet-dot {{
-            background: var(--accent-purple);
+            background: var(--tag-color);
         }}
 
         .table-container {{
@@ -874,8 +923,8 @@ def generate_single_note_html(note_data):
             min-width: 400px;
         }}
         .pro-table th {{
-            background: rgba(15, 23, 42, 0.9);
-            color: var(--accent-blue);
+            background: var(--card-inner);
+            color: var(--accent-color);
             font-weight: 700;
             padding: 10px 12px;
             border-bottom: 1px solid var(--border-color);
@@ -885,8 +934,8 @@ def generate_single_note_html(note_data):
         }}
         .pro-table td {{
             padding: 10px 12px;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.04);
-            color: #cbd5e1;
+            border-bottom: 1px solid var(--border-color);
+            color: var(--text-primary);
         }}
 
         .pro-callout {{
@@ -899,25 +948,25 @@ def generate_single_note_html(note_data):
             line-height: 1.6;
         }}
         .callout-info {{
-            background: rgba(56, 189, 248, 0.08);
-            border: 1px solid rgba(56, 189, 248, 0.25);
-            color: #bae6fd;
+            background: var(--accent-subtle);
+            border: 1px solid var(--border-focus);
+            color: var(--text-primary);
         }}
         .callout-warning {{
-            background: rgba(251, 146, 60, 0.08);
-            border: 1px solid rgba(251, 146, 60, 0.25);
-            color: #fed7aa;
+            background: rgba(245, 158, 11, 0.1);
+            border: 1px solid rgba(245, 158, 11, 0.3);
+            color: var(--text-primary);
         }}
         .callout-tip {{
-            background: rgba(52, 211, 153, 0.08);
-            border: 1px solid rgba(52, 211, 153, 0.25);
-            color: #a7f3d0;
+            background: rgba(16, 185, 129, 0.1);
+            border: 1px solid rgba(16, 185, 129, 0.3);
+            color: var(--text-primary);
         }}
-        .callout-icon {{ flex-shrink: 0; margin-top: 2px; }}
+        .callout-icon {{ flex-shrink: 0; margin-top: 2px; color: var(--accent-color); }}
 
         .inline-code {{
-            background: rgba(255, 255, 255, 0.08);
-            color: #fb7185;
+            background: var(--card-inner);
+            color: #e11d48;
             padding: 2px 5px;
             border-radius: 4px;
             font-family: 'JetBrains Mono', monospace;
@@ -936,9 +985,9 @@ def generate_single_note_html(note_data):
             display: flex;
             justify-content: space-between;
             align-items: center;
-            background: rgba(255, 255, 255, 0.03);
+            background: rgba(255, 255, 255, 0.04);
             padding: 8px 12px;
-            border-bottom: 1px solid var(--border-color);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
         }}
         .code-dots {{ display: flex; gap: 5px; }}
         .dot {{ width: 9px; height: 9px; border-radius: 50%; }}
@@ -948,15 +997,15 @@ def generate_single_note_html(note_data):
         .code-lang-badge {{
             font-size: 10.5px;
             text-transform: uppercase;
-            color: var(--text-muted);
+            color: #94a3b8;
             font-weight: 700;
             letter-spacing: 0.5px;
             font-family: 'JetBrains Mono', monospace;
         }}
         .copy-btn {{
-            background: rgba(255, 255, 255, 0.04);
-            border: 1px solid var(--border-color);
-            color: var(--text-secondary);
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            color: #cbd5e1;
             font-size: 11.5px;
             padding: 4px 8px;
             border-radius: 5px;
@@ -1002,7 +1051,7 @@ def generate_single_note_html(note_data):
             font-size: 13px;
             padding: 10px 16px;
             border-radius: 8px;
-            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
             display: none;
             align-items: center;
             justify-content: center;
@@ -1015,27 +1064,31 @@ def generate_single_note_html(note_data):
             to {{ transform: translateY(0); opacity: 1; }}
         }}
 
-        /* Responsive Mobile Specific Rules */
         @media (max-width: 640px) {{
             body {{ padding: 12px 8px 60px 8px; }}
             .container {{ padding: 18px 12px; border-radius: 12px; }}
             .back-nav {{ flex-direction: column; align-items: stretch; gap: 8px; }}
-            .back-link, .copy-all-btn {{ justify-content: center; width: 100%; }}
-            .section-card-header {{ padding: 10px 12px; }}
-            .section-card-body {{ padding: 12px 10px; }}
+            .nav-left-group {{ width: 100%; justify-content: space-between; }}
+            .copy-all-btn {{ justify-content: center; width: 100%; }}
         }}
     </style>
 </head>
 <body>
     <div class="container">
         <div class="back-nav">
-            <a href="../index.html" class="back-link">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
-                Quay lại Web Hub
-            </a>
+            <div class="nav-left-group">
+                <a href="../index.html" class="back-link">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
+                    Web Hub
+                </a>
+                <button class="theme-toggle-btn" id="themeToggleBtn" onclick="toggleTheme()">
+                    <span id="themeIcon">☀️</span>
+                    <span id="themeLabel">Sáng</span>
+                </button>
+            </div>
             <button class="copy-all-btn" onclick="copyEntireNote(this)">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
-                Copy toàn bộ note
+                Copy toàn bộ
             </button>
         </div>
         <div class="header">
@@ -1054,7 +1107,7 @@ def generate_single_note_html(note_data):
             {body_html}
         </div>
         <footer>
-            <span>⚡ AGY Note Pro</span>
+            <span>⚡ AGY Note • Taste Design</span>
             <span class="date-info">{formatted_date}</span>
         </footer>
     </div>
@@ -1062,6 +1115,34 @@ def generate_single_note_html(note_data):
     <div class="toast" id="toastMsg">✓ Đã copy vào clipboard!</div>
 
     <script>
+        function initTheme() {{
+            const saved = localStorage.getItem('agy_theme') || 'dark';
+            document.documentElement.setAttribute('data-theme', saved);
+            updateThemeBtn(saved);
+        }}
+
+        function toggleTheme() {{
+            const current = document.documentElement.getAttribute('data-theme') || 'dark';
+            const next = current === 'dark' ? 'light' : 'dark';
+            document.documentElement.setAttribute('data-theme', next);
+            localStorage.setItem('agy_theme', next);
+            updateThemeBtn(next);
+        }}
+
+        function updateThemeBtn(theme) {{
+            const icon = document.getElementById('themeIcon');
+            const label = document.getElementById('themeLabel');
+            if (icon && label) {{
+                if (theme === 'dark') {{
+                    icon.innerText = '☀️';
+                    label.innerText = 'Sáng';
+                }} else {{
+                    icon.innerText = '🌙';
+                    label.innerText = 'Tối';
+                }}
+            }}
+        }}
+
         function showToast(msg) {{
             const t = document.getElementById('toastMsg');
             t.innerText = msg;
@@ -1077,14 +1158,12 @@ def generate_single_note_html(note_data):
             const text = codeEl.innerText;
             navigator.clipboard.writeText(text).then(() => {{
                 const originalHtml = button.innerHTML;
-                button.innerHTML = '✓ Copied!';
+                button.innerHTML = '✓ Copied';
                 button.style.color = '#34d399';
-                button.style.borderColor = '#34d399';
                 showToast('✓ Đã copy đoạn code!');
                 setTimeout(() => {{
                     button.innerHTML = originalHtml;
                     button.style.color = '';
-                    button.style.borderColor = '';
                 }}, 2000);
             }});
         }}
@@ -1093,15 +1172,17 @@ def generate_single_note_html(note_data):
             const text = document.getElementById('noteContentArea').innerText;
             navigator.clipboard.writeText(text).then(() => {{
                 const originalText = button.innerHTML;
-                button.innerHTML = '✓ Đã Copy!';
+                button.innerHTML = '✓ Đã Copy';
                 button.style.color = '#34d399';
-                showToast('✓ Đã copy toàn bộ nội dung note!');
+                showToast('✓ Đã copy toàn bộ nội dung!');
                 setTimeout(() => {{
                     button.innerHTML = originalText;
                     button.style.color = '';
                 }}, 2000);
             }});
         }}
+
+        initTheme();
     </script>
 </body>
 </html>
@@ -1109,7 +1190,8 @@ def generate_single_note_html(note_data):
 
 def generate_web_hub(meta_list):
     """
-    Builds the central `index.html` Web Hub dashboard with UI/UX Pro Max mobile-first responsiveness.
+    Builds the central `index.html` Web Hub dashboard with Taste-Design architecture
+    and 1-click Dark/Light mode toggle.
     """
     ensure_dirs()
     notes_json_str = json.dumps(meta_list, ensure_ascii=False)
@@ -1126,39 +1208,64 @@ def generate_web_hub(meta_list):
         '''
 
     hub_html = f"""<!DOCTYPE html>
-<html lang="vi">
+<html lang="vi" data-theme="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
     <title>AGY Notes Hub</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
     <style>
         :root {{
-            --bg-color: #090d16;
-            --surface-bg: #111827;
-            --card-bg: #151f32;
-            --card-hover: #1c2940;
-            --text-primary: #f8fafc;
+            /* Dark Theme: Balanced Charcoal with Mid-Gray surfaces (Not pitch black) */
+            --bg-color: #0f1117;
+            --surface-bg: #181c26;
+            --card-bg: #1e2330;
+            --card-inner: #262c3c;
+            --card-hover: #232938;
+            --text-primary: #f1f5f9;
             --text-secondary: #94a3b8;
             --text-muted: #64748b;
-            --accent-blue: #38bdf8;
-            --accent-indigo: #818cf8;
-            --accent-purple: #c084fc;
-            --accent-green: #34d399;
-            --accent-orange: #fb923c;
-            --border-color: rgba(148, 163, 184, 0.14);
-            --border-glow: rgba(56, 189, 248, 0.3);
+            --accent-color: #38bdf8;
+            --accent-subtle: rgba(56, 189, 248, 0.12);
+            --tag-color: #c084fc;
+            --tag-subtle: rgba(192, 132, 252, 0.12);
+            --border-color: rgba(255, 255, 255, 0.08);
+            --border-focus: rgba(56, 189, 248, 0.35);
+            --shadow-subtle: 0 4px 20px rgba(0, 0, 0, 0.4);
+            --kv-border: rgba(255, 255, 255, 0.06);
         }}
+
+        [data-theme="light"] {{
+            /* Light Theme: Balanced Warm Zinc / Crisp Slate (Not blinding pure white) */
+            --bg-color: #f4f4f6;
+            --surface-bg: #ffffff;
+            --card-bg: #ffffff;
+            --card-inner: #f1f2f5;
+            --card-hover: #eaebee;
+            --text-primary: #18181b;
+            --text-secondary: #52525b;
+            --text-muted: #71717a;
+            --accent-color: #0284c7;
+            --accent-subtle: rgba(2, 132, 199, 0.1);
+            --tag-color: #7c3aed;
+            --tag-subtle: rgba(124, 58, 237, 0.09);
+            --border-color: rgba(0, 0, 0, 0.09);
+            --border-focus: rgba(2, 132, 199, 0.3);
+            --shadow-subtle: 0 4px 16px rgba(0, 0, 0, 0.06);
+            --kv-border: rgba(0, 0, 0, 0.06);
+        }}
+
         * {{ box-sizing: border-box; margin: 0; padding: 0; }}
         html {{ scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }}
         body {{
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
             background-color: var(--bg-color);
             color: var(--text-primary);
             padding: 20px 16px 80px 16px;
             min-height: 100vh;
+            transition: background-color 0.25s ease, color 0.25s ease;
         }}
         .container {{
             max-width: 1200px;
@@ -1175,11 +1282,9 @@ def generate_web_hub(meta_list):
             margin-bottom: 18px;
         }}
         .logo-area h1 {{
-            font-size: clamp(20px, 4vw, 25px);
+            font-size: clamp(20px, 4vw, 24px);
             font-weight: 800;
-            background: linear-gradient(135deg, var(--accent-blue) 0%, var(--accent-purple) 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
+            color: var(--text-primary);
             letter-spacing: -0.02em;
             display: flex;
             align-items: center;
@@ -1196,10 +1301,29 @@ def generate_web_hub(meta_list):
             gap: 8px;
             flex-wrap: wrap;
         }}
+        .theme-toggle-btn {{
+            background: var(--surface-bg);
+            border: 1px solid var(--border-color);
+            color: var(--text-secondary);
+            font-size: 12px;
+            font-weight: 600;
+            padding: 6px 12px;
+            border-radius: 8px;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            min-height: 36px;
+            transition: all 0.2s ease;
+        }}
+        .theme-toggle-btn:hover {{
+            color: var(--text-primary);
+            border-color: var(--border-focus);
+        }}
         .live-cloud-badge {{
-            background: rgba(52, 211, 153, 0.1);
-            border: 1px solid rgba(52, 211, 153, 0.35);
-            color: var(--accent-green);
+            background: rgba(16, 185, 129, 0.1);
+            border: 1px solid rgba(16, 185, 129, 0.35);
+            color: #10b981;
             padding: 6px 12px;
             border-radius: 8px;
             font-size: 12px;
@@ -1223,9 +1347,9 @@ def generate_web_hub(meta_list):
             50% {{ opacity: 0.4; transform: scale(0.85); }}
         }}
         .split-mode-btn {{
-            background: rgba(192, 132, 252, 0.12);
-            border: 1px solid rgba(192, 132, 252, 0.4);
-            color: var(--accent-purple);
+            background: var(--tag-subtle);
+            border: 1px solid var(--tag-color);
+            color: var(--tag-color);
             padding: 6px 12px;
             border-radius: 8px;
             font-size: 12px;
@@ -1235,10 +1359,11 @@ def generate_web_hub(meta_list):
             align-items: center;
             gap: 6px;
             min-height: 36px;
+            transition: all 0.2s ease;
         }}
         .split-mode-btn.active {{
-            background: var(--accent-purple);
-            color: #090d16;
+            background: var(--tag-color);
+            color: #ffffff;
         }}
         .stats-badge {{
             background: var(--surface-bg);
@@ -1246,7 +1371,7 @@ def generate_web_hub(meta_list):
             padding: 6px 10px;
             border-radius: 8px;
             font-size: 12px;
-            color: var(--accent-blue);
+            color: var(--accent-color);
             font-weight: 700;
             display: flex;
             align-items: center;
@@ -1269,14 +1394,14 @@ def generate_web_hub(meta_list):
             border: 1px solid var(--border-color);
             padding: 12px 16px 12px 40px;
             border-radius: 10px;
-            color: #fff;
+            color: var(--text-primary);
             font-size: 14px;
             outline: none;
             transition: all 0.2s ease;
         }}
         .search-input:focus {{
-            border-color: var(--accent-blue);
-            box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.2);
+            border-color: var(--accent-color);
+            box-shadow: 0 0 0 3px var(--border-focus);
         }}
         .search-icon {{
             position: absolute;
@@ -1288,7 +1413,7 @@ def generate_web_hub(meta_list):
             position: absolute;
             right: 12px;
             top: 11px;
-            background: rgba(255, 255, 255, 0.08);
+            background: var(--card-inner);
             border: 1px solid var(--border-color);
             padding: 2px 6px;
             border-radius: 5px;
@@ -1319,15 +1444,16 @@ def generate_web_hub(meta_list):
             align-items: center;
             gap: 6px;
             min-height: 36px;
+            transition: all 0.2s ease;
         }}
         .chip.active, .chip:hover {{
-            background: rgba(56, 189, 248, 0.14);
-            color: var(--accent-blue);
-            border-color: var(--accent-blue);
+            background: var(--accent-subtle);
+            color: var(--accent-color);
+            border-color: var(--accent-color);
         }}
         .chip-count {{
             font-size: 10.5px;
-            background: rgba(255, 255, 255, 0.1);
+            background: var(--card-inner);
             padding: 1px 5px;
             border-radius: 8px;
             font-family: 'JetBrains Mono', monospace;
@@ -1350,16 +1476,16 @@ def generate_web_hub(meta_list):
             color: inherit;
             position: relative;
             cursor: pointer;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
         }}
         .note-card:hover {{
             background: var(--card-hover);
             transform: translateY(-2px);
-            border-color: var(--border-glow);
+            border-color: var(--border-focus);
         }}
         .note-card.selected {{
-            border-color: var(--accent-purple);
-            background: rgba(192, 132, 252, 0.08);
+            border-color: var(--tag-color);
+            background: var(--tag-subtle);
         }}
         .card-checkbox {{
             position: absolute;
@@ -1368,7 +1494,7 @@ def generate_web_hub(meta_list):
             width: 20px;
             height: 20px;
             border-radius: 4px;
-            accent-color: var(--accent-purple);
+            accent-color: var(--tag-color);
             display: none;
             cursor: pointer;
             z-index: 2;
@@ -1393,11 +1519,11 @@ def generate_web_hub(meta_list):
             font-weight: 700;
             text-transform: uppercase;
             letter-spacing: 0.5px;
-            color: var(--accent-blue);
-            background: rgba(56, 189, 248, 0.1);
+            color: var(--accent-color);
+            background: var(--accent-subtle);
             padding: 3px 7px;
             border-radius: 5px;
-            border: 1px solid rgba(56, 189, 248, 0.2);
+            border: 1px solid var(--border-focus);
         }}
         .card-date {{
             font-size: 11.5px;
@@ -1406,7 +1532,7 @@ def generate_web_hub(meta_list):
         .card-title {{
             font-size: 16px;
             font-weight: 700;
-            color: #ffffff;
+            color: var(--text-primary);
             margin-bottom: 8px;
             line-height: 1.35;
             word-break: break-word;
@@ -1415,17 +1541,17 @@ def generate_web_hub(meta_list):
             margin: 8px 0;
             font-size: 11.5px;
             color: var(--text-secondary);
-            background: rgba(11, 17, 32, 0.6);
+            background: var(--card-inner);
             padding: 6px 8px;
             border-radius: 6px;
-            border-left: 2px solid var(--accent-green);
+            border-left: 2px solid #10b981;
             font-family: 'JetBrains Mono', monospace;
             line-height: 1.4;
             word-break: break-word;
         }}
         .card-snippet {{
             font-size: 13px;
-            color: #94a3b8;
+            color: var(--text-secondary);
             line-height: 1.55;
             display: -webkit-box;
             -webkit-line-clamp: 3;
@@ -1439,15 +1565,16 @@ def generate_web_hub(meta_list):
             flex-wrap: wrap;
             margin-top: 12px;
             padding-top: 10px;
-            border-top: 1px solid rgba(255, 255, 255, 0.05);
+            border-top: 1px solid var(--border-color);
         }}
         .tag-pill {{
             font-size: 11px;
-            color: var(--accent-purple);
-            background: rgba(192, 132, 252, 0.1);
+            color: var(--tag-color);
+            background: var(--tag-subtle);
             padding: 2px 6px;
             border-radius: 4px;
             font-family: 'JetBrains Mono', monospace;
+            font-weight: 500;
         }}
         .empty-state {{
             text-align: center;
@@ -1461,14 +1588,14 @@ def generate_web_hub(meta_list):
             bottom: 20px;
             left: 50%;
             transform: translateX(-50%) translateY(140%);
-            background: #162032;
-            border: 1px solid var(--accent-purple);
+            background: var(--surface-bg);
+            border: 1px solid var(--tag-color);
             border-radius: 12px;
             padding: 10px 18px;
             display: flex;
             align-items: center;
             gap: 12px;
-            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.7);
+            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.4);
             z-index: 100;
             width: calc(100% - 32px);
             max-width: 480px;
@@ -1480,17 +1607,17 @@ def generate_web_hub(meta_list):
         }}
         .floating-text {{
             font-size: 13px;
-            color: #fff;
+            color: var(--text-primary);
             font-weight: 700;
         }}
         .btn-launch-split {{
-            background: linear-gradient(135deg, var(--accent-purple), var(--accent-indigo));
-            color: #090d16;
+            background: var(--tag-color);
+            color: #ffffff;
             border: none;
             padding: 8px 16px;
             border-radius: 8px;
             font-size: 13px;
-            font-weight: 800;
+            font-weight: 700;
             cursor: pointer;
         }}
         .btn-clear-selection {{
@@ -1510,7 +1637,7 @@ def generate_web_hub(meta_list):
             left: 0;
             width: 100vw;
             height: 100vh;
-            background: rgba(9, 13, 22, 0.95);
+            background: rgba(15, 17, 23, 0.95);
             backdrop-filter: blur(16px);
             z-index: 9999;
             flex-direction: column;
@@ -1521,13 +1648,13 @@ def generate_web_hub(meta_list):
             justify-content: space-between;
             align-items: center;
             padding: 10px 16px;
-            background: #111827;
+            background: var(--surface-bg);
             border-bottom: 1px solid var(--border-color);
         }}
         .split-modal-title {{
             font-size: 14px;
             font-weight: 700;
-            color: #fff;
+            color: var(--text-primary);
         }}
         .split-modal-close {{
             background: rgba(239, 68, 68, 0.15);
@@ -1550,7 +1677,7 @@ def generate_web_hub(meta_list):
         .split-grid-container.cols-3 {{ grid-template-columns: 1fr 1fr 1fr; }}
         .split-grid-container.cols-4 {{ grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; }}
         .split-pane {{
-            background: #162032;
+            background: var(--card-bg);
             border: 1px solid var(--border-color);
             border-radius: 10px;
             overflow: hidden;
@@ -1558,18 +1685,18 @@ def generate_web_hub(meta_list):
             flex-direction: column;
         }}
         .split-pane-header {{
-            background: #0d131f;
+            background: var(--surface-bg);
             padding: 8px 12px;
             border-bottom: 1px solid var(--border-color);
             font-size: 12.5px;
             font-weight: 700;
-            color: var(--accent-blue);
+            color: var(--accent-color);
             display: flex;
             justify-content: space-between;
             align-items: center;
         }}
         .split-pane-header a {{
-            color: var(--accent-purple);
+            color: var(--tag-color);
             text-decoration: none;
             font-size: 11.5px;
         }}
@@ -1578,10 +1705,9 @@ def generate_web_hub(meta_list):
             height: 100%;
             border: none;
             flex: 1;
-            background: #090d16;
+            background: var(--bg-color);
         }}
 
-        /* Mobile specific layout fixes */
         @media (max-width: 768px) {{
             body {{ padding: 14px 10px 70px 10px; }}
             header {{ flex-direction: column; align-items: stretch; gap: 10px; }}
@@ -1602,12 +1728,16 @@ def generate_web_hub(meta_list):
         <header>
             <div class="logo-area">
                 <h1>
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2.5"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
                     AGY Notes Hub
                 </h1>
                 <p>Kho Ghi Chú AI • Mốc Trích Xuất & Cloud Sync</p>
             </div>
             <div class="header-actions">
+                <button class="theme-toggle-btn" id="themeToggleBtn" onclick="toggleTheme()">
+                    <span id="themeIcon">☀️</span>
+                    <span id="themeLabel">Sáng</span>
+                </button>
                 {cloud_badge_html}
                 <button class="split-mode-btn" id="toggleSplitBtn" onclick="toggleSplitMode()">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="8" height="18" rx="2"></rect><rect x="13" y="3" width="8" height="18" rx="2"></rect></svg>
@@ -1656,6 +1786,34 @@ def generate_web_hub(meta_list):
         let activeCategory = 'all';
         let splitModeActive = false;
         let selectedNoteIds = new Set();
+
+        function initTheme() {{
+            const saved = localStorage.getItem('agy_theme') || 'dark';
+            document.documentElement.setAttribute('data-theme', saved);
+            updateThemeBtn(saved);
+        }}
+
+        function toggleTheme() {{
+            const current = document.documentElement.getAttribute('data-theme') || 'dark';
+            const next = current === 'dark' ? 'light' : 'dark';
+            document.documentElement.setAttribute('data-theme', next);
+            localStorage.setItem('agy_theme', next);
+            updateThemeBtn(next);
+        }}
+
+        function updateThemeBtn(theme) {{
+            const icon = document.getElementById('themeIcon');
+            const label = document.getElementById('themeLabel');
+            if (icon && label) {{
+                if (theme === 'dark') {{
+                    icon.innerText = '☀️';
+                    label.innerText = 'Sáng';
+                }} else {{
+                    icon.innerText = '🌙';
+                    label.innerText = 'Tối';
+                }}
+            }}
+        }}
 
         document.addEventListener('keydown', (e) => {{
             if (e.key === '/' && document.activeElement !== document.getElementById('searchInput')) {{
@@ -1802,7 +1960,7 @@ def generate_web_hub(meta_list):
             if (filtered.length === 0) {{
                 grid.innerHTML = `
                     <div class="empty-state">
-                        <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="1.5"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                        <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
                         <p style="margin-top:10px">Không tìm thấy ghi chú nào.</p>
                     </div>
                 `;
@@ -1870,6 +2028,7 @@ def generate_web_hub(meta_list):
 
         document.getElementById('searchInput').addEventListener('input', filterAndRenderNotes);
 
+        initTheme();
         renderCategories();
         filterAndRenderNotes();
         checkUrlParams();
